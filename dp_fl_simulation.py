@@ -77,7 +77,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
 
                 # Add DP noise
-                add_dp_noise(model, scale=1.0 / epsilon, mechanism=mechanism)
+                add_dp_noise(model, scale=1.0 / (epsilon/num_clients), mechanism=mechanism)
 
                 optimizer.step()
 

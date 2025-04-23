@@ -5,11 +5,11 @@ from dp_fl_simulation import run_dp_federated_learning
 st.title("Differentially Private Federated Learning Explorer")
 
 # Sidebar for parameters
-epsilon = st.sidebar.slider("Privacy parameter ε", 0.1, 5.0, 1.0, 0.1)
-clip = st.sidebar.slider("Clipping norm", 0.1, 5.0, 1.0, 0.1)
-num_clients = st.sidebar.slider("Number of clients", 1, 10, 5)
+epsilon = st.sidebar.slider("Privacy parameter ε", 0.0, 0.1, 10.0, 0.1)
+clip = st.sidebar.slider("Clipping norm", 0.0, 5.0, 1.0, 0.1)
+num_clients = st.sidebar.slider("Number of clients", 1, 20, 5)
 mechanism = st.sidebar.selectbox("DP Mechanism", ["Gaussian", "Laplace"])
-rounds = st.sidebar.slider("Number of communication rounds", 1, 30, 5)
+rounds = st.sidebar.slider("Number of communication rounds", 1, 100, 5)
 
 # Placeholders for dynamic UI
 global_plot_placeholder = st.empty()
