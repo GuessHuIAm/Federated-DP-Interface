@@ -1,6 +1,4 @@
 import torch
-torch.classes.__path__ = []  # workaround for Streamlit + torch
-
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
@@ -8,7 +6,6 @@ import torchvision.transforms as transforms
 import numpy as np
 from torch.utils.data import DataLoader, Subset
 import random
-import time
 
 # Simple CNN for MNIST
 class SimpleCNN(nn.Module):
@@ -36,7 +33,7 @@ def add_dp_noise(model, scale, mechanism="Gaussian"):
             param.grad += noise
 
 # Federated Learning Simulation
-def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, client_status, client_progress_bar):
+def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = transforms.Compose([transforms.ToTensor()])
     trainset = torchvision.datasets.MNIST(root="./data", train=True, download=True, transform=transform)
@@ -72,13 +69,8 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, cli
 
     for rnd in range(rounds):
         client_models = []
-        client_progress_bar.progress(0.0)
 
-        for i, dataloader in enumerate(client_dataloaders):
-            client_status.info(f"Round {rnd + 1} / {rounds} → Training client {i + 1} of {num_clients}")
-            client_progress_bar.progress((i + 1) / num_clients)
-            time.sleep(0.05)
-
+        for dataloader in client_dataloaders:
             model = SimpleCNN().to(device)
             model.load_state_dict(global_model.state_dict())
             model.train()
@@ -108,7 +100,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, cli
                     _, predicted = torch.max(outputs, 1)
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
-            client_acc_history[i].append(correct / total)
+            client_acc_history[client_dataloaders.index(dataloader)].append(correct / total)
 
         # Aggregate global model
         new_state_dict = {}

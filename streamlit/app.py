@@ -1,7 +1,7 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-import time
-from dp_fl_simulation import run_dp_federated_learning
+
+from backend.dp_fl_simulation import run_dp_federated_learning
 
 if "simulation_running" not in st.session_state:
     st.session_state.simulation_running = False
