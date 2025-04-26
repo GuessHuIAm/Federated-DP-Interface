@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Typography } from '@mui/material';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import TrainingInfoGraphic from './TrainingInfoGraphic';
 
 function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack }) {
   const [globalAccuracy, setGlobalAccuracy] = useState([]);
@@ -52,6 +53,8 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
       <Typography variant="h5" gutterBottom>
         Training in Progress
       </Typography>
+
+      <TrainingInfoGraphic />
 
       <div style={{ marginBottom: '20px' }}>
         <Typography variant="body1">Privacy parameter ε: {epsilon}</Typography>
