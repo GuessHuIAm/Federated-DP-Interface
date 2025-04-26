@@ -11,3 +11,26 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.slick-slider:before,
+.slick-slider:after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  width: 100px;
+  top: 0;
+  height: 100%;
+  pointer-events: none;
+}
+.slick-slider:before {
+  left: 0;
+  background: linear-gradient(to right, rgb(255, 255, 255), rgba(255, 255, 255, 0));
+}
+.slick-slider:after {
+  right: 0;
+  background: linear-gradient(to left, rgb(255, 255, 255), rgba(255, 255, 255, 0));
+}
+
+.slick-slider {
+  height: max-content;
+}

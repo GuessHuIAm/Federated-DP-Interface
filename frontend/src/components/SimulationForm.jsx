@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Slider, Select, MenuItem, FormControl, InputLabel, Typography } from '@mui/material';
 import SimulationStream from './SimulationStream';
+import TrainingInfoGraphic from './TrainingInfoGraphic';
 
 function SimulationForm() {
   const [epsilon, setEpsilon] = useState(1.0);
@@ -32,6 +33,8 @@ function SimulationForm() {
       <Typography variant="h4" gutterBottom>
         Differential Privacy FL Explorer
       </Typography>
+
+      <TrainingInfoGraphic />
 
       <Typography gutterBottom>Privacy parameter ε</Typography>
       <Slider value={epsilon} min={0.1} max={10.0} step={0.1} onChange={(e, val) => setEpsilon(val)} valueLabelDisplay="auto"/>
