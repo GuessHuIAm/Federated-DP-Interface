@@ -1,26 +1,54 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
-import torchvision.transforms as transforms
+import pandas as pd
 import numpy as np
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader, Subset
 import random
 
-# Simple CNN for MNIST
-class SimpleCNN(nn.Module):
-    def __init__(self):
+# Load Heart Attack dataset
+class HeartAttackDataset(Dataset):
+    def __init__(self, csv_file):
+        data = pd.read_csv(csv_file)
+
+        # Drop non-numeric / problematic columns
+        data = data.drop(columns=[
+            'Patient ID',      # String ID
+            'Blood Pressure',  # '120/80' format
+            'Country',         # Text
+            'Continent',       # Text
+            'Hemisphere',      # Text
+            'Diet',            # Text
+            'Sex'              # Text
+        ])
+
+        # Separate features and target
+        self.X = data.drop(columns=['Heart Attack Risk']).values.astype(np.float32)
+        self.y = data['Heart Attack Risk'].values.astype(np.float32)
+
+        # Normalize features (critical for MLPs)
+        self.X = (self.X - self.X.mean(axis=0)) / (self.X.std(axis=0) + 1e-6)
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.X[idx]), torch.tensor(self.y[idx])
+
+# Deeper MLP model for tabular data
+class HeartAttackMLP(nn.Module):
+    def __init__(self, input_dim):
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(32 * 14 * 14, 128)
-        self.fc2 = nn.Linear(128, 10)
+        self.fc1 = nn.Linear(input_dim, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 32)
+        self.fc4 = nn.Linear(32, 1)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = x.view(-1, 32 * 14 * 14)
         x = F.relu(self.fc1(x))
-        return self.fc2(x)
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        return torch.sigmoid(self.fc4(x)).squeeze()
 
 # Add Gaussian or Laplace noise to model gradients
 def add_dp_noise(model, scale, mechanism="Gaussian"):
@@ -35,21 +63,27 @@ def add_dp_noise(model, scale, mechanism="Gaussian"):
 # Federated Learning Simulation
 def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    transform = transforms.Compose([transforms.ToTensor()])
-    trainset = torchvision.datasets.MNIST(root="./data", train=True, download=True, transform=transform)
-    testset = torchvision.datasets.MNIST(root="./data", train=False, download=True, transform=transform)
 
-    data_per_client = len(trainset) // num_clients
+    # Load dataset
+    dataset = HeartAttackDataset("./datasets/heart_attack_prediction_dataset.csv")
+
+    # Split into clients
+    data_per_client = len(dataset) // num_clients
     client_dataloaders = [
-        DataLoader(Subset(trainset, list(range(i * data_per_client, (i + 1) * data_per_client))),
+        DataLoader(Subset(dataset, list(range(i * data_per_client, (i + 1) * data_per_client))),
                    batch_size=32, shuffle=True)
         for i in range(num_clients)
     ]
 
-    test_loader = DataLoader(testset, batch_size=256)
+    # Train/Test Split
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
+    test_loader = DataLoader(test_dataset, batch_size=64)
 
-    global_model = SimpleCNN().to(device)
-    criterion = nn.CrossEntropyLoss()
+    input_dim = dataset.X.shape[1]
+    global_model = HeartAttackMLP(input_dim).to(device)
+    criterion = nn.BCELoss()
 
     global_acc = []
     client_acc_history = [[] for _ in range(num_clients)]
@@ -58,12 +92,13 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
     global_model.eval()
     correct, total = 0, 0
     with torch.no_grad():
-        for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = global_model(images)
-            _, predicted = torch.max(outputs, 1)
+        for features, labels in test_loader:
+            features, labels = features.to(device), labels.to(device)
+            outputs = global_model(features)
+            predicted = (outputs > 0.5).float()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+
     global_acc.append(correct / total)
     yield global_acc.copy(), [[] for _ in range(num_clients)]
 
@@ -71,22 +106,24 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
         client_models = []
 
         for dataloader in client_dataloaders:
-            model = SimpleCNN().to(device)
+            model = HeartAttackMLP(input_dim).to(device)
             model.load_state_dict(global_model.state_dict())
             model.train()
 
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-            for images, labels in dataloader:
-                images, labels = images.to(device), labels.to(device)
-                optimizer.zero_grad()
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-                loss.backward()
+            # Local training: 2 epochs instead of 1
+            for epoch in range(2):
+                for features, labels in dataloader:
+                    features, labels = features.to(device), labels.to(device)
+                    optimizer.zero_grad()
+                    outputs = model(features)
+                    loss = criterion(outputs, labels)
+                    loss.backward()
 
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-                add_dp_noise(model, scale=1.0 / (epsilon / num_clients), mechanism=mechanism)
-                optimizer.step()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+                    add_dp_noise(model, scale=1.0 / (epsilon / num_clients), mechanism=mechanism)
+                    optimizer.step()
 
             client_models.append(model.state_dict())
 
@@ -94,12 +131,14 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
             model.eval()
             correct, total = 0, 0
             with torch.no_grad():
-                for images, labels in dataloader:
-                    images, labels = images.to(device), labels.to(device)
-                    outputs = model(images)
-                    _, predicted = torch.max(outputs, 1)
+                for features, labels in dataloader:
+                    features, labels = features.to(device), labels.to(device)
+                    outputs = model(features)
+                    predicted = (outputs > 0.5).float()
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
+            print(f"Round {rnd+1}: Global Accuracy = {correct / total:.4f}")
+
             client_acc_history[client_dataloaders.index(dataloader)].append(correct / total)
 
         # Aggregate global model
@@ -112,10 +151,10 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
         global_model.eval()
         correct, total = 0, 0
         with torch.no_grad():
-            for images, labels in test_loader:
-                images, labels = images.to(device), labels.to(device)
-                outputs = global_model(images)
-                _, predicted = torch.max(outputs, 1)
+            for features, labels in test_loader:
+                features, labels = features.to(device), labels.to(device)
+                outputs = global_model(features)
+                predicted = (outputs > 0.5).float()
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
         global_acc.append(correct / total)
