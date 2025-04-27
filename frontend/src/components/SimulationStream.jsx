@@ -11,6 +11,10 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
   const [totalTrainingTime, setTotalTrainingTime] = useState(0);
   const [eventSource, setEventSource] = useState(null);
   const [currentRoundElapsed, setCurrentRoundElapsed] = useState(0);
+  const [clientAccuracy, setClientAccuracy] = useState({});
+  const [clientColors, setClientColors] = useState({});
+  const [visibleClients, setVisibleClients] = useState({});
+
 
   useEffect(() => {
     const source = new EventSource(
@@ -23,8 +27,24 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
 
       const acc = data.global_accuracy.map((a, i) => ({ round: i, accuracy: a }));
       const nextRound = acc.length;
+      const newClientAccuracy = {};
+      const newClientColors = {};
+      const newVisibleClients = {};
+
+      data.client_accuracy.forEach((accHistory, clientIdx) => {
+        newClientAccuracy[clientIdx] = accHistory.map((accuracy, round) => ({
+          round,
+          accuracy
+        }));
+
+        newClientColors[clientIdx] = "#" + Math.floor(Math.random()*16777215).toString(16);
+        newVisibleClients[clientIdx] = true; // all clients visible initially
+      });
 
       setGlobalAccuracy(acc);
+      setClientAccuracy(newClientAccuracy);
+      setClientColors(newClientColors);
+      setVisibleClients(newVisibleClients);
       setCurrentRound(nextRound);
       setRoundDurations(prev => [...prev, data.round_duration]);
       setTotalTrainingTime(data.total_training_time);
@@ -74,7 +94,13 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
   }
 
   return (
-    <div style={{ padding: 20, textAlign: 'center' }}>
+    <div style={{ 
+      padding: 20, 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      textAlign: 'center' 
+    }}>
       <Typography variant="h5" gutterBottom>Training in Progress</Typography>
 
       <TrainingInfoGraphic />
@@ -104,6 +130,8 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         )}
       </div>
 
+      <Typography variant="h6" sx={{ mt: 4 }}>Global Training Accuracy</Typography>
+
       <LineChart width={600} height={300} data={globalAccuracy} margin={{ bottom: 40 }}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
@@ -115,6 +143,69 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         <Legend verticalAlign="top" align="right" />
         <Line type="monotone" dataKey="accuracy" stroke="#8884d8" activeDot={{ r: 8 }} />
       </LineChart>
+
+      <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>Client Training Accuracy</Typography>
+
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 4, mb: 4 }}>
+        {/* Left side: the chart */}
+        <LineChart width={800} height={500} margin={{ bottom: 40 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis type="number" dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
+          <YAxis domain={[0, 1]} tickFormatter={(value) => `${(value * 100).toFixed(0)}%`} />
+          <Tooltip
+            formatter={(value, name) => [`${(value * 100).toFixed(2)}%`, name]}
+            labelFormatter={(label) => label === 0 ? 'Initial Evaluation' : `Round ${label}`}
+          />
+
+          {Object.entries(clientAccuracy).map(([clientId, data], idx) => (
+            visibleClients[clientId] && (
+              <Line
+                key={clientId}
+                data={data}
+                type="monotone"
+                dataKey="accuracy"
+                name={`Client ${clientId}`}
+                stroke={clientColors[clientId]}
+                strokeDasharray={idx % 2 === 0 ? "5 5" : "3 3"}
+                dot={false}
+              />
+            )
+          ))}
+        </LineChart>
+
+        {/* Right side: the checkboxes */}
+        <Box
+          sx={{
+            maxHeight: 500,
+            overflowY: 'auto',
+            border: '1px solid #ccc',
+            borderRadius: 2,
+            boxShadow: 2,
+            padding: 2,
+            width: 200, // narrow width for the checkbox list
+          }}
+        >
+          {Object.keys(clientAccuracy).map((clientId) => (
+            <Box key={clientId} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <input
+                type="checkbox"
+                checked={visibleClients[clientId]}
+                onChange={() =>
+                  setVisibleClients(prev => ({
+                    ...prev,
+                    [clientId]: !prev[clientId]
+                  }))
+                }
+              />
+              <Typography sx={{ ml: 1 }} style={{ color: clientColors[clientId], fontSize: '0.8rem' }}>
+                Client {clientId}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      <Typography variant="h6" sx={{ mt: 4 }}>Round Duration</Typography>
 
       <LineChart
         width={600}
