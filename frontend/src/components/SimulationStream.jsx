@@ -142,7 +142,10 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5}} />
         <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
-        <Tooltip formatter={(v) => [`${(v * 100).toFixed(2)}%`, 'Accuracy']} />
+        <Tooltip
+          formatter={(v => [`${(v * 100).toFixed(2)}%`, 'Accuracy'])} 
+          labelFormatter={(label => (label === 0) ? 'Initial Evaluation' : `Round ${label}`)}
+        />
         <Legend verticalAlign="top" align="right" />
         <Line type="monotone" dataKey="accuracy" stroke="#8884d8" activeDot={{ r: 8 }} />
       </LineChart>
@@ -241,7 +244,10 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
         <YAxis label={{ value: 'Time (seconds)', angle: -90, position: 'insideLeft' }} />
-        <Tooltip formatter={(v) => [`${v.toFixed(2)}s`, 'Duration']} />
+        <Tooltip
+          formatter={(v) => [`${v.toFixed(2)}s`, 'Duration']}
+          labelFormatter={(label => (label === 0) ? 'Initial Evaluation' : `Round ${label}`)}
+        />
         <Legend verticalAlign="top" align="right" />
         <Line type="monotone" dataKey="duration" stroke="#82ca9d" activeDot={{ r: 8 }} />
       </LineChart>
