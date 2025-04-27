@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button, Typography, CircularProgress, Box } from '@mui/material';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { Button, Typography, CircularProgress, Box, Checkbox, FormControlLabel } from '@mui/material';
 import TrainingInfoGraphic from './TrainingInfoGraphic';
 
 function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack }) {
@@ -15,6 +15,28 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
   const [clientColors, setClientColors] = useState({});
   const [visibleClients, setVisibleClients] = useState({});
 
+  useEffect(() => {
+    if (numClients > 0) {
+      const initialColors = {};
+      const palette = [
+        '#FF6633', '#FF33FF', '#00B3E6', '#E6B333', '#3366E6',
+        '#999966', '#99FF99', '#B34D4D', '#80B300', '#809900',
+        '#E6B3B3', '#6680B3', '#66991A', '#FF99E6', '#CCFF1A',
+        '#FF1A66', '#E6331A', '#33FFCC', '#66994D', '#B366CC'
+      ]; // 20 preset colors
+      
+      for (let i = 0; i < numClients; i++) {
+        initialColors[i] = palette[i % palette.length];
+      }
+      setClientColors(initialColors);
+
+      const initialVisibility = {};
+      for (let i = 0; i < numClients; i++) {
+        initialVisibility[i] = true;
+      }
+      setVisibleClients(initialVisibility);
+    }
+  }, [numClients]);
 
   useEffect(() => {
     const source = new EventSource(
@@ -27,24 +49,17 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
 
       const acc = data.global_accuracy.map((a, i) => ({ round: i, accuracy: a }));
       const nextRound = acc.length;
-      const newClientAccuracy = {};
-      const newClientColors = {};
-      const newVisibleClients = {};
 
+      const newClientAccuracy = {};
       data.client_accuracy.forEach((accHistory, clientIdx) => {
         newClientAccuracy[clientIdx] = accHistory.map((accuracy, round) => ({
-          round,
+          round: round + 1,
           accuracy
         }));
-
-        newClientColors[clientIdx] = "#" + Math.floor(Math.random()*16777215).toString(16);
-        newVisibleClients[clientIdx] = true; // all clients visible initially
       });
 
       setGlobalAccuracy(acc);
       setClientAccuracy(newClientAccuracy);
-      setClientColors(newClientColors);
-      setVisibleClients(newVisibleClients);
       setCurrentRound(nextRound);
       setRoundDurations(prev => [...prev, data.round_duration]);
       setTotalTrainingTime(data.total_training_time);
@@ -58,17 +73,13 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
 
     return () => source.close();
   }, [epsilon, clip, numClients, mechanism, rounds]);
-  
-  useEffect(() => {
-    if (currentRound > rounds) {
-      return;
-    }
 
+  useEffect(() => {
+    if (currentRound > rounds) return;
     const id = setInterval(() => {
       setCurrentRoundElapsed((Date.now() - currentRoundStart) / 1000);
-    }, 100); // update every 0.1 seconds
-  
-    return () => clearInterval(id); // cleanup when component unmounts
+    }, 100);
+    return () => clearInterval(id);
   }, [currentRoundStart, currentRound, rounds]);
 
   const handleBack = () => {
@@ -82,16 +93,13 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
     return 'Training complete';
   };
 
-  function formatDuration(seconds) {
+  const formatDuration = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    const secString = (secs === 1) ? 'second' : 'seconds';
-    const minString = (minutes === 1) ? 'minute' : 'minutes';
-    if (minutes > 0) {
-      return `${minutes} ${minString}, ${secs} ${secString}`;
-    }
-    return `${secs} ${secString}`;
-  }
+    const secString = secs === 1 ? 'second' : 'seconds';
+    const minString = minutes === 1 ? 'minute' : 'minutes';
+    return minutes > 0 ? `${minutes} ${minString}, ${secs} ${secString}` : `${secs} ${secString}`;
+  };
 
   return (
     <div style={{ 
@@ -105,7 +113,7 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
 
       <TrainingInfoGraphic />
 
-      <div style={{ marginBottom: 20 }}>
+      <Box sx={{ marginBottom: 2 }}>
         <Typography variant="body1">Privacy parameter ε: {epsilon}</Typography>
         <Typography variant="body1">Clipping Norm: {clip}</Typography>
         <Typography variant="body1">Number of Clients: {numClients}</Typography>
@@ -119,44 +127,39 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         {currentRound <= rounds ? (
           <Box sx={{ mt: 1, display: 'inline-flex', alignItems: 'center' }}>
             <CircularProgress size={14} sx={{ mr: 1 }} />
-            <Typography variant="body2" component="span">
-              Current Round Time: {currentRoundElapsed.toFixed(1)} seconds
-            </Typography>
+            <Typography variant="body2">Current Round Time: {currentRoundElapsed.toFixed(1)} seconds</Typography>
           </Box>
         ) : (
           <Typography variant="body2" sx={{ mt: 1 }}>
             Training complete in {formatDuration(totalTrainingTime)}.
           </Typography>
         )}
-      </div>
+      </Box>
 
+      {/* Global Accuracy */}
       <Typography variant="h6" sx={{ mt: 4 }}>Global Training Accuracy</Typography>
-
       <LineChart width={600} height={300} data={globalAccuracy} margin={{ bottom: 40 }}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
-        <YAxis domain={[0, 1]} tickFormatter={(value) => `${(value * 100).toFixed(0)}%`} />
-        <Tooltip
-          formatter={(value) => [`${(value * 100).toFixed(2)}%`, 'Accuracy']}
-          labelFormatter={(label) => label === 0 ? 'Initial Evaluation' : `Round ${label}`}
-        />
+        <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5}} />
+        <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
+        <Tooltip formatter={(v) => [`${(v * 100).toFixed(2)}%`, 'Accuracy']} />
         <Legend verticalAlign="top" align="right" />
         <Line type="monotone" dataKey="accuracy" stroke="#8884d8" activeDot={{ r: 8 }} />
       </LineChart>
 
+      {/* Client Accuracy */}
       <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>Client Training Accuracy</Typography>
 
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 4, mb: 4 }}>
-        {/* Left side: the chart */}
+        {/* Chart */}
         <LineChart width={800} height={500} margin={{ bottom: 40 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis type="number" dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
-          <YAxis domain={[0, 1]} tickFormatter={(value) => `${(value * 100).toFixed(0)}%`} />
+          <XAxis type="number" dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} domain={[1, 'dataMax']}/>
+          <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
           <Tooltip
             formatter={(value, name) => [`${(value * 100).toFixed(2)}%`, name]}
-            labelFormatter={(label) => label === 0 ? 'Initial Evaluation' : `Round ${label}`}
+            labelFormatter={(label) => `Round ${label}`}
           />
-
           {Object.entries(clientAccuracy).map(([clientId, data], idx) => (
             visibleClients[clientId] && (
               <Line
@@ -173,53 +176,72 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
           ))}
         </LineChart>
 
-        {/* Right side: the checkboxes */}
-        <Box
-          sx={{
-            maxHeight: 500,
-            overflowY: 'auto',
-            border: '1px solid #ccc',
-            borderRadius: 2,
-            boxShadow: 2,
-            padding: 2,
-            width: 200, // narrow width for the checkbox list
-          }}
-        >
+        {/* Checkboxes */}
+        <Box sx={{
+          maxHeight: 500,
+          overflowY: 'auto',
+          border: '1px solid #ccc',
+          borderRadius: 2,
+          boxShadow: 2,
+          padding: 2,
+          width: 250,
+          margin: '0 auto',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 1,
+        }}>
           {Object.keys(clientAccuracy).map((clientId) => (
-            <Box key={clientId} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <input
-                type="checkbox"
-                checked={visibleClients[clientId]}
-                onChange={() =>
-                  setVisibleClients(prev => ({
-                    ...prev,
-                    [clientId]: !prev[clientId]
-                  }))
-                }
-              />
-              <Typography sx={{ ml: 1 }} style={{ color: clientColors[clientId], fontSize: '0.8rem' }}>
-                Client {clientId}
-              </Typography>
-            </Box>
+            <FormControlLabel
+              key={clientId}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={visibleClients[clientId]}
+                  onChange={() =>
+                    setVisibleClients(prev => ({
+                      ...prev,
+                      [clientId]: !prev[clientId]
+                    }))
+                  }
+                  sx={{
+                    color: clientColors[clientId],
+                    '&.Mui-checked': {
+                      color: clientColors[clientId],
+                    },
+                    padding: 0.2,
+                  }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: clientColors[clientId],
+                  }} />
+                  <Typography sx={{ fontSize: '0.75rem' }}>
+                    Client {clientId}
+                  </Typography>
+                </Box>
+              }
+              sx={{ 
+                marginBottom: 0,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}/>
           ))}
         </Box>
       </Box>
 
+      {/* Round Duration */}
       <Typography variant="h6" sx={{ mt: 4 }}>Round Duration</Typography>
-
-      <LineChart
-        width={600}
-        height={300}
-        data={roundDurations.map((duration, index) => ({ round: index, duration }))}
-        margin={{ bottom: 40, top: 20 }}
-      >
+      <LineChart width={600} height={300} data={roundDurations.map((duration, index) => ({ round: index, duration }))} margin={{ bottom: 40 }}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
         <YAxis label={{ value: 'Time (seconds)', angle: -90, position: 'insideLeft' }} />
-        <Tooltip
-          formatter={(value) => [`${value.toFixed(2)}s`, 'Duration']}
-          labelFormatter={(label) => label === 0 ? 'Initial Evaluation' : `Round ${label}`}
-        />
+        <Tooltip formatter={(v) => [`${v.toFixed(2)}s`, 'Duration']} />
         <Legend verticalAlign="top" align="right" />
         <Line type="monotone" dataKey="duration" stroke="#82ca9d" activeDot={{ r: 8 }} />
       </LineChart>
