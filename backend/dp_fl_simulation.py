@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset, DataLoader, Subset
-import random
 
 # Load Heart Attack dataset
 class HeartAttackDataset(Dataset):
@@ -100,6 +99,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
             correct += (predicted == labels).sum().item()
 
     global_acc.append(correct / total)
+    print(f"Initial Global Accuracy: {correct / total:.4f}")
     yield global_acc.copy(), [[] for _ in range(num_clients)]
 
     for rnd in range(rounds):
@@ -137,9 +137,9 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
                     predicted = (outputs > 0.5).float()
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
-            print(f"Round {rnd+1}: Global Accuracy = {correct / total:.4f}")
 
             client_acc_history[client_dataloaders.index(dataloader)].append(correct / total)
+            print(f"Round {rnd + 1}, Client {client_dataloaders.index(dataloader)}: {correct / total:.4f}")
 
         # Aggregate global model
         new_state_dict = {}
@@ -158,6 +158,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
         global_acc.append(correct / total)
+        print(f"Round {rnd + 1}: Global Accuracy: {correct / total:.4f}")
 
         # Yield after each round
         yield global_acc.copy(), [acc.copy() for acc in client_acc_history]

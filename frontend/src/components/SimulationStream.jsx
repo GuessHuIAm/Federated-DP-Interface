@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Typography, CircularProgress, Box } from '@mui/material';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import TrainingInfoGraphic from './TrainingInfoGraphic';
@@ -7,9 +7,10 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
   const [globalAccuracy, setGlobalAccuracy] = useState([]);
   const [currentRound, setCurrentRound] = useState(0);
   const [roundDurations, setRoundDurations] = useState([]);
-  const [currentRoundTime, setCurrentRoundTime] = useState(0);
-  const roundStartRef = useRef(null);
+  const [currentRoundStart, setCurrentRoundStart] = useState(Date.now());
+  const [totalTrainingTime, setTotalTrainingTime] = useState(0);
   const [eventSource, setEventSource] = useState(null);
+  const [currentRoundElapsed, setCurrentRoundElapsed] = useState(0);
 
   useEffect(() => {
     const source = new EventSource(
@@ -17,44 +18,38 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
     );
     setEventSource(source);
 
-    roundStartRef.current = Date.now();
-    setCurrentRoundTime(0);
-
     source.onmessage = (event) => {
-      const now = Date.now();
-
-      if (roundStartRef.current) {
-        setRoundDurations(prev => [
-          ...prev,
-          (now - roundStartRef.current) / 1000
-        ]);
-      }
-
       const data = JSON.parse(event.data);
-      const acc = data.global_accuracy.map((a, i) => ({ round: i, accuracy: a }));
-      setGlobalAccuracy(acc);
-      setCurrentRound(acc.length - 1);
 
-      roundStartRef.current = now;
-      setCurrentRoundTime(0);
+      const acc = data.global_accuracy.map((a, i) => ({ round: i, accuracy: a }));
+      const nextRound = acc.length;
+
+      setGlobalAccuracy(acc);
+      setCurrentRound(nextRound);
+      setRoundDurations(prev => [...prev, data.round_duration]);
+      setTotalTrainingTime(data.total_training_time);
+      setCurrentRoundStart(Date.now());
     };
 
     source.onerror = (e) => {
-      console.error('stream error', e);
+      console.error("Error in EventSource:", e);
       source.close();
     };
 
     return () => source.close();
   }, [epsilon, clip, numClients, mechanism, rounds]);
-
+  
   useEffect(() => {
+    if (currentRound > rounds) {
+      return;
+    }
+
     const id = setInterval(() => {
-      if (roundStartRef.current) {
-        setCurrentRoundTime(Math.floor((Date.now() - roundStartRef.current) / 1000));
-      }
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
+      setCurrentRoundElapsed((Date.now() - currentRoundStart) / 1000);
+    }, 100); // update every 0.1 seconds
+  
+    return () => clearInterval(id); // cleanup when component unmounts
+  }, [currentRoundStart, currentRound, rounds]);
 
   const handleBack = () => {
     eventSource?.close();
@@ -70,7 +65,12 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
   function formatDuration(seconds) {
     const minutes = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
+    const secString = (secs === 1) ? 'second' : 'seconds';
+    const minString = (minutes === 1) ? 'minute' : 'minutes';
+    if (minutes > 0) {
+      return `${minutes} ${minString}, ${secs} ${secString}`;
+    }
+    return `${secs} ${secString}`;
   }
 
   return (
@@ -90,13 +90,17 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
           {roundLabel()}
         </Typography>
 
-        {currentRound <= rounds && (
+        {currentRound <= rounds ? (
           <Box sx={{ mt: 1, display: 'inline-flex', alignItems: 'center' }}>
             <CircularProgress size={14} sx={{ mr: 1 }} />
             <Typography variant="body2" component="span">
-              Current Round Time: {formatDuration(currentRoundTime)}
+              Current Round Time: {currentRoundElapsed.toFixed(1)} seconds
             </Typography>
           </Box>
+        ) : (
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Training complete in {formatDuration(totalTrainingTime)}.
+          </Typography>
         )}
       </div>
 
@@ -112,16 +116,22 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         <Line type="monotone" dataKey="accuracy" stroke="#8884d8" activeDot={{ r: 8 }} />
       </LineChart>
 
-      <div style={{ marginTop: 20, textAlign: 'left' }}>
-        <Typography variant="h6">Round Durations (seconds):</Typography>
-        <ul>
-          {roundDurations.map((d, i) => (
-            <li key={i}>
-              Round {i} : {formatDuration(d)}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <LineChart
+        width={600}
+        height={300}
+        data={roundDurations.map((duration, index) => ({ round: index, duration }))}
+        margin={{ bottom: 40, top: 20 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
+        <YAxis label={{ value: 'Time (seconds)', angle: -90, position: 'insideLeft' }} />
+        <Tooltip
+          formatter={(value) => [`${value.toFixed(2)}s`, 'Duration']}
+          labelFormatter={(label) => label === 0 ? 'Initial Evaluation' : `Round ${label}`}
+        />
+        <Legend verticalAlign="top" align="right" />
+        <Line type="monotone" dataKey="duration" stroke="#82ca9d" activeDot={{ r: 8 }} />
+      </LineChart>
 
       <Button
         variant="contained"
