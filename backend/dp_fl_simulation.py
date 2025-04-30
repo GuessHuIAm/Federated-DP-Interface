@@ -50,6 +50,7 @@ def add_dp_noise(model, scale, mechanism="Gaussian"):
 
 # Federated Learning Simulation
 def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds):
+    print("hello")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load dataset

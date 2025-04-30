@@ -1,3 +1,5 @@
+import React from 'react';
+
 function PrevArrow(props) {
     const { onClick } = props;
     return (

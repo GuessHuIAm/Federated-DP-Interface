@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { Button, Slider, Select, MenuItem, FormControl, InputLabel, Typography, Tooltip } from '@mui/material';
+import React, { useState } from 'react';
+import {
+  Button, Slider, Select, MenuItem, FormControl,
+  InputLabel, Typography, TextField, Tooltip
+} from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import SimulationStream from './SimulationStream';
+import SweepResults from './SweepResults';
 import TrainingInfoGraphic from './TrainingInfoGraphic';
 
 function SimulationForm() {
@@ -10,24 +13,54 @@ function SimulationForm() {
   const [numClients, setNumClients] = useState(5);
   const [mechanism, setMechanism] = useState('Gaussian');
   const [rounds, setRounds] = useState(5);
+
+  const [sweepParam, setSweepParam] = useState('numClients');
+  const [sweepValues, setSweepValues] = useState('2,4,6,8');
   const [start, setStart] = useState(false);
+  const [sweepConfig, setSweepConfig] = useState(null);
 
   const handleStart = () => {
+    const parsedValues = sweepValues.split(',').map(v => Number(v.trim()));
+    setSweepConfig({ param: sweepParam, values: parsedValues });
     setStart(true);
+  };
+
+  const setDefault = (param) => {
+    if (param === 'epsilon') setEpsilon(1.0);
+    else if (param === 'clip') setClip(1.0);
+    else if (param === 'numClients') setNumClients(5);
+    else if (param === 'rounds') setRounds(10);
   };
 
   if (start) {
     return (
-      <SimulationStream
+      <SweepResults
+        param={sweepConfig.param}
+        values={sweepConfig.values}
         epsilon={epsilon}
         clip={clip}
-        numClients={numClients}
         mechanism={mechanism}
         rounds={rounds}
+        numClients={numClients}
         onBack={() => setStart(false)}
       />
     );
   }
+
+  const ParameterControl = ({ label, tooltip, value, onChange, min, max, step, paramKey }) => (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Typography gutterBottom sx={{ mb: 0 }}>{label}</Typography>
+          <Tooltip title={tooltip} arrow>
+            <InfoOutlinedIcon fontSize="small" />
+          </Tooltip>
+        </div>
+        <Button size="small" onClick={() => setDefault(paramKey)}>Set Default</Button>
+      </div>
+      <Slider value={value} min={min} max={max} step={step} onChange={(e, val) => onChange(val)} valueLabelDisplay="auto" />
+    </>
+  );
 
   return (
     <div style={{ padding: '20px' }}>
@@ -37,106 +70,81 @@ function SimulationForm() {
 
       <TrainingInfoGraphic />
 
-      {/* Privacy parameter ε */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '24px' }}>
-        <Typography gutterBottom style={{ display: 'flex', alignItems: 'center' }}>
-          Privacy parameter ε
-        </Typography>
-        <Tooltip
-          title="Controls how much noise is added. Lower ε = stronger privacy but may hurt model accuracy."
-          arrow
-          placement="right"
-          componentsProps={{
-            tooltip: { sx: { fontSize: '18px' } }
-          }}
-        >
-          <InfoOutlinedIcon fontSize="small" sx={{ position: 'relative', top: '-2.25px' }} />
-        </Tooltip>
-      </div>
-      <Slider value={epsilon} min={0.1} max={10.0} step={0.1} onChange={(e, val) => setEpsilon(val)} valueLabelDisplay="auto" />
+      {/* Parameter Sweep Controls */}
+      <FormControl fullWidth style={{ marginTop: '24px' }}>
+        <InputLabel>Parameter to Evaluate</InputLabel>
+        <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
+          <MenuItem value="numClients">Number of Clients</MenuItem>
+          <MenuItem value="epsilon">Epsilon</MenuItem>
+          <MenuItem value="rounds">Rounds</MenuItem>
+        </Select>
+      </FormControl>
 
-      {/* Clipping Norm */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '24px' }}>
-        <Typography gutterBottom style={{ display: 'flex', alignItems: 'center' }}>
-          Clipping Norm
-        </Typography>
-        <Tooltip
-          title="Limits the size of each client's model update. Smaller norms improve privacy protection but may slow learning if updates are heavily clipped."
-          arrow
-          placement="right"
-          componentsProps={{
-            tooltip: { sx: { fontSize: '18px' } }
-          }}
-        >
-          <InfoOutlinedIcon fontSize="small" sx={{ position: 'relative', top: '-2.25px' }} />
-        </Tooltip>
-      </div>
-      <Slider value={clip} min={0.1} max={5.0} step={0.1} onChange={(e, val) => setClip(val)} valueLabelDisplay="auto" />
+      <TextField
+        fullWidth
+        style={{ marginTop: '12px' }}
+        label="Values to Evaluate (comma-separated)"
+        value={sweepValues}
+        onChange={(e) => setSweepValues(e.target.value)}
+      />
 
-      {/* Number of Clients */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '24px' }}>
-        <Typography gutterBottom style={{ display: 'flex', alignItems: 'center' }}>
-          Number of Clients
-        </Typography>
-        <Tooltip
-          title="The number of clients participating in each round. More clients lead to more stable updates but require more communication."
-          arrow
-          placement="right"
-          componentsProps={{
-            tooltip: { sx: { fontSize: '18px' } }
-          }}
-        >
-          <InfoOutlinedIcon fontSize="small" sx={{ position: 'relative', top: '-2.25px' }} />
-        </Tooltip>
-      </div>
-      <Slider value={numClients} min={1} max={20} step={1} onChange={(e, val) => setNumClients(val)} valueLabelDisplay="auto" />
+      <Typography variant="h6" sx={{ mt: 4 }}>Fixed Parameters</Typography>
 
-      {/* Rounds */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '24px' }}>
-        <Typography gutterBottom style={{ display: 'flex', alignItems: 'center' }}>
-          Rounds
-        </Typography>
-        <Tooltip
-          title="Total number of communication rounds. More rounds help the model converge but can increase total privacy loss over time."
-          arrow
-          placement="right"
-          componentsProps={{
-            tooltip: { sx: { fontSize: '18px' } }
-          }}
-        >
-          <InfoOutlinedIcon fontSize="small" sx={{ position: 'relative', top: '-2.25px' }} />
-        </Tooltip>
-      </div>
-      <Slider value={rounds} min={1} max={100} step={1} onChange={(e, val) => setRounds(val)} valueLabelDisplay="auto" />
+      {sweepParam !== 'epsilon' && (
+        <ParameterControl
+          label="Privacy parameter ε"
+          tooltip="Controls how much noise is added. Lower ε = stronger privacy but may hurt model accuracy."
+          value={epsilon}
+          onChange={setEpsilon}
+          min={0.1}
+          max={10.0}
+          step={0.1}
+          paramKey="epsilon"
+        />
+      )}
 
-      {/* DP Mechanism */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '30px' }}>
-        <Typography gutterBottom style={{ display: 'flex', alignItems: 'center' }}>
-          DP Mechanism
-        </Typography>
-        <Tooltip
-          title={
-            "Chooses the type of noise added to protect updates:\n\n" +
-            "• Gaussian noise: Adds normally distributed noise; commonly used for scalable and flexible privacy guarantees.\n\n" +
-            "• Laplace noise: Adds noise from a Laplace distribution; can provide tighter privacy for small datasets but is more sensitive to extreme updates."
-          }
-          arrow
-          placement="right"
-          componentsProps={{
-            tooltip: { sx: { fontSize: '18px', whiteSpace: 'pre-line' } }
-          }}
-        >
-          <InfoOutlinedIcon fontSize="small" sx={{ position: 'relative', top: '-2.25px' }} />
-        </Tooltip>
-      </div>
+      {sweepParam !== 'clip' && (
+        <ParameterControl
+          label="Clipping Norm"
+          tooltip="Limits the size of each client's model update. Smaller norms improve privacy protection but may slow learning if updates are heavily clipped."
+          value={clip}
+          onChange={setClip}
+          min={0.1}
+          max={5.0}
+          step={0.1}
+          paramKey="clip"
+        />
+      )}
 
-      <FormControl fullWidth style={{ marginTop: '8px' }}>
-        <Select
-          labelId="mechanism-label"
-          value={mechanism}
-          label="DP Mechanism"
-          onChange={(e) => setMechanism(e.target.value)}
-        >
+      {sweepParam !== 'numClients' && (
+        <ParameterControl
+          label="Number of Clients"
+          tooltip="The number of clients participating in each round. More clients lead to more stable updates but require more communication."
+          value={numClients}
+          onChange={setNumClients}
+          min={1}
+          max={20}
+          step={1}
+          paramKey="numClients"
+        />
+      )}
+
+      {sweepParam !== 'rounds' && (
+        <ParameterControl
+          label="Rounds"
+          tooltip="Total number of communication rounds. More rounds help the model converge but can increase total privacy loss over time."
+          value={rounds}
+          onChange={setRounds}
+          min={1}
+          max={100}
+          step={1}
+          paramKey="rounds"
+        />
+      )}
+
+      <FormControl fullWidth style={{ marginTop: '24px' }}>
+        <InputLabel>DP Mechanism</InputLabel>
+        <Select value={mechanism} onChange={(e) => setMechanism(e.target.value)}>
           <MenuItem value="Gaussian">Gaussian</MenuItem>
           <MenuItem value="Laplace">Laplace</MenuItem>
         </Select>
@@ -149,7 +157,7 @@ function SimulationForm() {
         fullWidth
         onClick={handleStart}
       >
-        Start Training
+        Start Parameter Evaluation
       </Button>
     </div>
   );

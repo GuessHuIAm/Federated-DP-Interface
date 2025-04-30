@@ -1,3 +1,5 @@
+import React from 'react';
+
 import SimulationForm from './components/SimulationForm';
 
 function App() {

@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
-import { Button, Typography, CircularProgress, Box, Checkbox, FormControlLabel } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip,
+  CartesianGrid, Legend
+} from 'recharts';
+import {
+  Button, Typography, CircularProgress, Box,
+  Checkbox, FormControlLabel
+} from '@mui/material';
 import TrainingInfoGraphic from './TrainingInfoGraphic';
 
 function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack }) {
@@ -15,6 +21,7 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
   const [clientColors, setClientColors] = useState({});
   const [visibleClients, setVisibleClients] = useState({});
 
+  // Assign colors and visibility states to clients
   useEffect(() => {
     if (numClients > 0) {
       const initialColors = {};
@@ -23,8 +30,8 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         '#999966', '#99FF99', '#B34D4D', '#80B300', '#809900',
         '#E6B3B3', '#6680B3', '#66991A', '#FF99E6', '#CCFF1A',
         '#FF1A66', '#E6331A', '#33FFCC', '#66994D', '#B366CC'
-      ]; // 20 preset colors
-      
+      ];
+
       for (let i = 0; i < numClients; i++) {
         initialColors[i] = palette[i % palette.length];
       }
@@ -38,6 +45,7 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
     }
   }, [numClients]);
 
+  // Stream data from backend
   useEffect(() => {
     const source = new EventSource(
       `http://localhost:8000/stream_training?epsilon=${epsilon}&clip=${clip}&num_clients=${numClients}&mechanism=${mechanism}&rounds=${rounds}`
@@ -46,7 +54,6 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
 
     source.onmessage = (event) => {
       const data = JSON.parse(event.data);
-
       const acc = data.global_accuracy.map((a, i) => ({ round: i, accuracy: a }));
       const nextRound = acc.length;
 
@@ -102,13 +109,7 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
   };
 
   return (
-    <div style={{ 
-      padding: 20, 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'center', 
-      textAlign: 'center' 
-    }}>
+    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
       <Typography variant="h5" gutterBottom>Training in Progress</Typography>
 
       <TrainingInfoGraphic />
@@ -119,7 +120,6 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         <Typography variant="body1">Number of Clients: {numClients}</Typography>
         <Typography variant="body1">DP Mechanism: {mechanism}</Typography>
         <Typography variant="body1">Rounds: {rounds}</Typography>
-
         <Typography variant="h6" sx={{ mt: 1, fontStyle: 'italic' }}>
           {roundLabel()}
         </Typography>
@@ -140,12 +140,9 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
       <Typography variant="h6" sx={{ mt: 4 }}>Global Training Accuracy</Typography>
       <LineChart width={600} height={300} data={globalAccuracy} margin={{ bottom: 40 }}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5}} />
+        <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
         <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
-        <Tooltip
-          formatter={(v => [`${(v * 100).toFixed(2)}%`, 'Accuracy'])} 
-          labelFormatter={(label => (label === 0) ? 'Initial Evaluation' : `Round ${label}`)}
-        />
+        <Tooltip formatter={(v) => [`${(v * 100).toFixed(2)}%`, 'Accuracy']} labelFormatter={(label) => label === 0 ? 'Initial Evaluation' : `Round ${label}`} />
         <Legend verticalAlign="top" align="right" />
         <Line type="monotone" dataKey="accuracy" stroke="#8884d8" activeDot={{ r: 8 }} />
       </LineChart>
@@ -154,17 +151,14 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
       <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>Client Training Accuracy</Typography>
 
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 4, mb: 4 }}>
-        {/* Chart */}
         <LineChart width={800} height={500} margin={{ bottom: 40 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis type="number" dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} domain={[1, 'dataMax']}/>
+          <XAxis type="number" dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} domain={[1, 'dataMax']} />
           <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
-          <Tooltip
-            formatter={(value, name) => [`${(value * 100).toFixed(2)}%`, name]}
-            labelFormatter={(label) => `Round ${label}`}
-          />
+          <Tooltip formatter={(v) => [`${(v * 100).toFixed(2)}%`, 'Accuracy']} labelFormatter={(label) => `Round ${label}`} />
+          <Legend />
           {Object.entries(clientAccuracy).map(([clientId, data], idx) => (
-            visibleClients[clientId] && (
+            visibleClients[clientId] ? (
               <Line
                 key={clientId}
                 data={data}
@@ -175,7 +169,7 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
                 strokeDasharray={idx % 2 === 0 ? "5 5" : "3 3"}
                 dot={false}
               />
-            )
+            ) : null
           ))}
         </LineChart>
 
@@ -188,7 +182,6 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
           boxShadow: 2,
           padding: 2,
           width: 250,
-          margin: '0 auto',
           display: 'grid',
           gridTemplateColumns: 'repeat(2, 1fr)',
           gap: 1,
@@ -219,6 +212,7 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Box sx={{
                     height: 8,
+                    width: 8,
                     borderRadius: '50%',
                     backgroundColor: clientColors[clientId],
                   }} />
@@ -227,13 +221,14 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
                   </Typography>
                 </Box>
               }
-              sx={{ 
+              sx={{
                 marginBottom: 0,
                 width: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-              }}/>
+              }}
+            />
           ))}
         </Box>
       </Box>
@@ -244,20 +239,12 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="round" label={{ value: 'Round', position: 'insideBottom', offset: -5 }} />
         <YAxis label={{ value: 'Time (seconds)', angle: -90, position: 'insideLeft' }} />
-        <Tooltip
-          formatter={(v) => [`${v.toFixed(2)}s`, 'Duration']}
-          labelFormatter={(label => (label === 0) ? 'Initial Evaluation' : `Round ${label}`)}
-        />
+        <Tooltip formatter={(v) => [`${v.toFixed(2)}s`, 'Duration']} labelFormatter={(label) => label === 0 ? 'Initial Evaluation' : `Round ${label}`} />
         <Legend verticalAlign="top" align="right" />
         <Line type="monotone" dataKey="duration" stroke="#82ca9d" activeDot={{ r: 8 }} />
       </LineChart>
 
-      <Button
-        variant="contained"
-        color="secondary"
-        sx={{ mt: 3 }}
-        onClick={handleBack}
-      >
+      <Button variant="contained" color="secondary" sx={{ mt: 3 }} onClick={handleBack}>
         Stop and Return to Settings
       </Button>
     </div>
