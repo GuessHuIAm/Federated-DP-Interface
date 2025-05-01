@@ -40,7 +40,7 @@ function SimulationStream({ epsilon, clip, numClients, mechanism, rounds, onBack
 
   useEffect(() => {
     const source = new EventSource(
-      `http://localhost:8000/stream_training?epsilon=${epsilon}&clip=${clip}&num_clients=${numClients}&mechanism=${mechanism}&rounds=${rounds}`
+      `http://localhost:8001/stream_training?epsilon=${epsilon}&clip=${clip}&num_clients=${numClients}&mechanism=${mechanism}&rounds=${rounds}`
     );
     setEventSource(source);
 
