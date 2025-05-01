@@ -10,8 +10,6 @@ import hashlib
 import os
 from torch.utils.data import Dataset, DataLoader, Subset
 
-delta = 1e-5
-
 # Load new Heart Attack dataset
 class HeartAttackDataset(Dataset):
     """
@@ -66,7 +64,7 @@ def add_dp_noise(model, scale, mechanism="Gaussian"):
             param.grad += noise
 
 # Federated Learning Simulation
-def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epochs_per_client=5):
+def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epochs_per_client=5, delta = 1e-5):
     logging.info("Starting DP Federated Learning Simulation")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
