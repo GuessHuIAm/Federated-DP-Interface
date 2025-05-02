@@ -1,67 +1,62 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import pandas as pd
-import numpy as np
 import logging
+import pathlib
 import math
-from datetime import datetime
-import hashlib
-import os
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader, random_split
+import kagglehub
+from typing import Union
 
-# Load new Heart Attack dataset
-class HeartAttackDataset(Dataset):
-    """
-    Wrapper for processed dataset
-    @csv_file: string path to the CSV file
-    """
-    def __init__(self, csv_file):
-        data = pd.read_csv(csv_file)
+def _ensure_cardio_csv() -> pathlib.Path:
+    cache_dir = kagglehub.dataset_download("sulianova/cardiovascular-disease-dataset")
+    csv_path  = pathlib.Path(cache_dir) / "cardio_train.csv"
+    if not csv_path.exists():
+        raise FileNotFoundError("cardio_train.csv not found in Kaggle bundle")
+    return csv_path
 
-        # No need to drop columns in the new dataset
-        self.y = data['target'].values.astype(np.float32)
-        self.X = data.drop(columns=['target']).values.astype(np.float32)
+class CardioDataset(Dataset):
+    def __init__(self, csv_path: Union[str, pathlib.Path]):
+        df = pd.read_csv(csv_path, sep=";")
+        
+        # Preprocess the dataset
+        df = df.drop(columns=["id"])
+        df["age"] = (df["age"] / 365).astype(float)
 
-        # Normalize features
-        self.X = (self.X - self.X.mean(axis=0)) / (self.X.std(axis=0) + 1e-6)
-        assert(self.X.shape[0] == data.shape[0])
-        assert(self.y.shape[0] == data.shape[0])
+        self.y = df["cardio"].to_numpy(dtype="float32")
+        self.X = (
+            df.drop(columns=["cardio"])
+              .astype("float32")
+              .to_numpy()
+        )
+        self.X = (self.X - self.X.mean(0)) / (self.X.std(0) + 1e-6)
 
-    def __len__(self):
-        return len(self.y)
-
+    def __len__(self):  return len(self.y)
     def __getitem__(self, idx):
         return torch.tensor(self.X[idx]), torch.tensor(self.y[idx])
 
-# Deeper MLP model for tabular data
-class HeartAttackMLP(nn.Module):
-    """
-    A simple MLP model for binary classification
-    @input_dim: number of features in the input data
-    """
-    def __init__(self, input_dim):
+class CardioMLP(nn.Module):
+    def __init__(self, d_in):
         super().__init__()
-        self.fc1 = nn.Linear(input_dim, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 32)
-        self.fc4 = nn.Linear(32, 1)
-
+        self.net = nn.Sequential(
+            nn.Linear(d_in, 128), nn.ReLU(),
+            nn.Linear(128, 64),   nn.ReLU(),
+            nn.Linear(64, 32),    nn.ReLU(),
+            nn.Linear(32, 1),     # logit
+        )
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        return torch.sigmoid(self.fc4(x)).squeeze()
+        return self.net(x).squeeze()
 
 # Add Gaussian or Laplace noise to model gradients
 def add_dp_noise(model, scale, mechanism="Gaussian"):
     for param in model.parameters():
-        if param.requires_grad:
-            if mechanism == "Gaussian":
-                noise = torch.normal(0, scale, size=param.grad.shape).to(param.device)
-            else:
-                noise = torch.distributions.Laplace(0, scale).sample(param.grad.shape).to(param.device)
-            param.grad += noise
+        if param.grad is None:
+            continue
+        if mechanism == "Gaussian":
+            noise = torch.normal(0, scale, size=param.grad.shape).to(param.device)
+        else:
+            noise = torch.distributions.Laplace(0, scale).sample(param.grad.shape).to(param.device)
+        # param.grad += noise # Uncomment to add noise to gradients
 
 # Federated Learning Simulation
 def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epochs_per_client=5, delta = 1e-5):
@@ -69,10 +64,10 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load dataset
-    dataset = HeartAttackDataset("./datasets/Heart Attack Data Set.csv")
+    dataset = CardioDataset(_ensure_cardio_csv())
 
     # Train/Test Split
-    train_size = int(0.8 * len(dataset))
+    train_size = int(0.7 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
 
@@ -80,20 +75,18 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
 
     # Initiate global model
     input_dim = dataset.X.shape[1]
-    global_model = HeartAttackMLP(input_dim).to(device)
-    criterion = nn.BCELoss()
+    global_model = CardioMLP(input_dim).to(device)
+    criterion = nn.BCEWithLogitsLoss()
 
     # Bookkeeping for global and client accuracy
     global_acc = []
     client_acc_history = [[] for _ in range(num_clients)]
 
     # Split train dataset among clients
-    data_per_client = len(train_dataset) // num_clients
-    client_dataloaders = [
-        DataLoader(Subset(train_dataset, list(range(i * data_per_client, (i + 1) * data_per_client))),
-                   batch_size=32, shuffle=True)
-        for i in range(num_clients)
-    ]
+    rows_pc = len(train_dataset) // num_clients
+    splits = [rows_pc] * (num_clients - 1) + [len(train_dataset) - rows_pc * (num_clients - 1)]
+    subsets = random_split(train_dataset, splits)
+    client_dataloaders = [DataLoader(s, batch_size=32, shuffle=True) for s in subsets]
 
     # Initial evaluation
     global_model.eval()
@@ -102,13 +95,13 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
         for features, labels in test_loader:
             features, labels = features.to(device), labels.to(device)
             outputs = global_model(features)
-            predicted = (outputs > 0.5).float()
+            predicted = (torch.sigmoid(outputs) > 0.5).float()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
     global_acc.append(correct / total)
     print(f"Initial Global Accuracy: {correct / total:.4f}")
-    # yield global_acc.copy(), [[] for _ in range(num_clients)]
+    yield global_acc.copy(), [[] for _ in range(num_clients)]
 
     # For each communication round
     for rnd in range(rounds):
@@ -117,7 +110,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
 
         # Each client trains its local model
         for i, dataloader in enumerate(client_dataloaders):
-            model = HeartAttackMLP(input_dim).to(device)
+            model = CardioMLP(input_dim).to(device)
             model.load_state_dict(global_model.state_dict())
             model.train()
 
@@ -152,7 +145,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
                 for features, labels in dataloader:
                     features, labels = features.to(device), labels.to(device)
                     outputs = model(features)
-                    predicted = (outputs > 0.5).float()
+                    predicted = (torch.sigmoid(outputs) > 0.5).float()
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
 
@@ -176,11 +169,11 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
             for features, labels in test_loader:
                 features, labels = features.to(device), labels.to(device)
                 outputs = global_model(features)
-                predicted = (outputs > 0.5).float()
+                predicted = (torch.sigmoid(outputs) > 0.5).float()
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
         global_acc.append(correct / total)
         print(f"Round {rnd+1}: Global Accuracy: {correct / total:.4f}")
 
-        # yield global_acc.copy(), [acc.copy() for acc in client_acc_history]
+        yield global_acc.copy(), [acc.copy() for acc in client_acc_history]
