@@ -8,6 +8,8 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import kagglehub
 from typing import Union
 
+torch.manual_seed(0) # For reproducibility
+
 def _ensure_cardio_csv() -> pathlib.Path:
     cache_dir = kagglehub.dataset_download("sulianova/cardiovascular-disease-dataset")
     csv_path  = pathlib.Path(cache_dir) / "cardio_train.csv"
@@ -56,7 +58,7 @@ def add_dp_noise(model, scale, mechanism="Gaussian"):
             noise = torch.normal(0, scale, size=param.grad.shape).to(param.device)
         else:
             noise = torch.distributions.Laplace(0, scale).sample(param.grad.shape).to(param.device)
-        # param.grad += noise # Uncomment to add noise to gradients
+        param.grad += noise
 
 # Federated Learning Simulation
 def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epochs_per_client=5, delta = 1e-5):
@@ -72,6 +74,10 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
 
     test_loader = DataLoader(test_dataset, batch_size=32)
+    
+    print(f"Train size: {len(train_dataset)}, Test size: {len(test_dataset)}")
+    print(f"Number of clients: {num_clients}, Rounds: {rounds}, Epsilon: {epsilon}, Mechanism: {mechanism}")
+    print(f"Clip: {clip}, Delta: {delta}, Epochs per client: {epochs_per_client}")
 
     # Initiate global model
     input_dim = dataset.X.shape[1]
@@ -114,7 +120,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
             model.load_state_dict(global_model.state_dict())
             model.train()
 
-            optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+            optimizer = torch.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
             local_loss = 0
@@ -133,7 +139,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
                     optimizer.step()
 
                     local_loss += loss.item()
-                scheduler.step()
+            scheduler.step()
 
             client_models.append(model.state_dict())
             client_sizes.append(len(dataloader.dataset))
