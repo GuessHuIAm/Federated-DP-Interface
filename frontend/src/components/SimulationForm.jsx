@@ -32,6 +32,13 @@ function SimulationForm() {
     else if (param === 'rounds') setRounds(10);
   };
 
+  const sweepParamTooltips = {
+    epsilon: "Controls how much noise is added. Lower ε = stronger privacy but may hurt model accuracy.",
+    numClients: "The number of clients participating in each round. More clients lead to more stable updates but require more communication.",
+    rounds: "Total number of communication rounds. More rounds help the model converge but can increase total privacy loss over time.",
+  };
+  
+
   if (start) {
     return (
       <SweepResults
@@ -70,7 +77,27 @@ function SimulationForm() {
 
       <TrainingInfoGraphic />
 
-      {/* Parameter Sweep Controls */}
+      <div style={{ marginTop: '24px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+      <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>Parameter to Evaluate</Typography>
+      <Tooltip
+        title={sweepParamTooltips[sweepParam] || "Select which parameter to vary. The others will be held constant."}
+        arrow
+      >
+        <InfoOutlinedIcon fontSize="small" />
+      </Tooltip>
+    </div>
+    <FormControl fullWidth>
+      <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
+        <MenuItem value="numClients">Number of Clients</MenuItem>
+        <MenuItem value="epsilon">Epsilon</MenuItem>
+        <MenuItem value="rounds">Rounds</MenuItem>
+      </Select>
+    </FormControl>
+  </div>
+
+
+      {/* Parameter Sweep Controls
       <FormControl fullWidth style={{ marginTop: '24px' }}>
         <InputLabel>Parameter to Evaluate</InputLabel>
         <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
@@ -78,7 +105,7 @@ function SimulationForm() {
           <MenuItem value="epsilon">Epsilon</MenuItem>
           <MenuItem value="rounds">Rounds</MenuItem>
         </Select>
-      </FormControl>
+      </FormControl> */}
 
       <TextField
         fullWidth
@@ -103,7 +130,7 @@ function SimulationForm() {
         />
       )}
 
-      {sweepParam !== 'clip' && (
+      {/* {sweepParam !== 'clip' && (
         <ParameterControl
           label="Clipping Norm"
           tooltip="Limits the size of each client's model update. Smaller norms improve privacy protection but may slow learning if updates are heavily clipped."
@@ -114,7 +141,7 @@ function SimulationForm() {
           step={0.1}
           paramKey="clip"
         />
-      )}
+      )} */}
 
       {sweepParam !== 'numClients' && (
         <ParameterControl
