@@ -20,7 +20,19 @@ function SimulationForm() {
   const [sweepConfig, setSweepConfig] = useState(null);
 
   const handleStart = () => {
-    const parsedValues = sweepValues.split(',').map(v => Number(v.trim()));
+    const parsedValues = sweepValues
+      .split(',')
+      .map(v => Number(v.trim()))
+      .filter(v => {
+        if (sweepParam === 'epsilon') return !isNaN(v) && v > 0;
+        return Number.isInteger(v) && v > 0;
+      });
+
+    if (parsedValues.length === 0) {
+      alert("Invalid values. Please correct the input.");
+      return;
+    }
+
     setSweepConfig({ param: sweepParam, values: parsedValues });
     setStart(true);
   };
@@ -32,12 +44,19 @@ function SimulationForm() {
     else if (param === 'rounds') setRounds(10);
   };
 
+  const isValidSweepValues = () => {
+    const parsed = sweepValues.split(',').map(v => Number(v.trim()));
+    if (sweepParam === 'epsilon') {
+      return parsed.every(v => !isNaN(v) && v > 0);
+    }
+    return parsed.every(v => Number.isInteger(v) && v > 0);
+  };
+
   const sweepParamTooltips = {
     epsilon: "Controls how much noise is added. Lower ε = stronger privacy but may hurt model accuracy.",
     numClients: "The number of clients participating in each round. More clients lead to more stable updates but require more communication.",
     rounds: "Total number of communication rounds. More rounds help the model converge but can increase total privacy loss over time.",
   };
-  
 
   if (start) {
     return (
@@ -78,34 +97,23 @@ function SimulationForm() {
       <TrainingInfoGraphic />
 
       <div style={{ marginTop: '24px' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-      <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>Parameter to Evaluate</Typography>
-      <Tooltip
-        title={sweepParamTooltips[sweepParam] || "Select which parameter to vary. The others will be held constant."}
-        arrow
-      >
-        <InfoOutlinedIcon fontSize="small" />
-      </Tooltip>
-    </div>
-    <FormControl fullWidth>
-      <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
-        <MenuItem value="numClients">Number of Clients</MenuItem>
-        <MenuItem value="epsilon">Epsilon</MenuItem>
-        <MenuItem value="rounds">Rounds</MenuItem>
-      </Select>
-    </FormControl>
-  </div>
-
-
-      {/* Parameter Sweep Controls
-      <FormControl fullWidth style={{ marginTop: '24px' }}>
-        <InputLabel>Parameter to Evaluate</InputLabel>
-        <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
-          <MenuItem value="numClients">Number of Clients</MenuItem>
-          <MenuItem value="epsilon">Epsilon</MenuItem>
-          <MenuItem value="rounds">Rounds</MenuItem>
-        </Select>
-      </FormControl> */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>Parameter to Evaluate</Typography>
+          <Tooltip
+            title={sweepParamTooltips[sweepParam] || "Select which parameter to vary. The others will be held constant."}
+            arrow
+          >
+            <InfoOutlinedIcon fontSize="small" />
+          </Tooltip>
+        </div>
+        <FormControl fullWidth>
+          <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
+            <MenuItem value="numClients">Number of Clients</MenuItem>
+            <MenuItem value="epsilon">Epsilon</MenuItem>
+            <MenuItem value="rounds">Rounds</MenuItem>
+          </Select>
+        </FormControl>
+      </div>
 
       <TextField
         fullWidth
@@ -113,6 +121,14 @@ function SimulationForm() {
         label="Values to Evaluate (comma-separated)"
         value={sweepValues}
         onChange={(e) => setSweepValues(e.target.value)}
+        error={!isValidSweepValues()}
+        helperText={
+          !isValidSweepValues()
+            ? sweepParam === 'epsilon'
+              ? "Enter only positive numbers (e.g., 0.5, 1.0, 2)"
+              : "Enter only positive integers (e.g., 2, 4, 6)"
+            : " "
+        }
       />
 
       <Typography variant="h6" sx={{ mt: 4 }}>Fixed Parameters</Typography>
@@ -129,19 +145,6 @@ function SimulationForm() {
           paramKey="epsilon"
         />
       )}
-
-      {/* {sweepParam !== 'clip' && (
-        <ParameterControl
-          label="Clipping Norm"
-          tooltip="Limits the size of each client's model update. Smaller norms improve privacy protection but may slow learning if updates are heavily clipped."
-          value={clip}
-          onChange={setClip}
-          min={0.1}
-          max={5.0}
-          step={0.1}
-          paramKey="clip"
-        />
-      )} */}
 
       {sweepParam !== 'numClients' && (
         <ParameterControl
@@ -183,6 +186,7 @@ function SimulationForm() {
         style={{ marginTop: '30px' }}
         fullWidth
         onClick={handleStart}
+        disabled={!isValidSweepValues()}
       >
         Start Parameter Evaluation
       </Button>

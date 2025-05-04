@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   Typography, CircularProgress, Button, Box
@@ -8,36 +8,43 @@ import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Label } from 're
 function SweepResults({ param, values, epsilon, clip, mechanism, rounds, numClients, onBack }) {
   const [results, setResults] = useState([]);
   const [loadingIndex, setLoadingIndex] = useState(0);
+  const hasRun = useRef(false);  // 🚫 prevent duplicate calls
 
   useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
+
     const runSweeps = async () => {
-      const output = [];
-      for (let i = 0; i < values.length; i++) {
-        const value = values[i];
-
-        // Always define full config; override sweep param
-        const config = {
-          epsilon,
-          clip,
-          mechanism,
-          rounds,
-          numClients,
-        };
-        config[param] = value; // override one parameter
-
-        setLoadingIndex(i + 1);
-
-        try {
-          const response = await axios.post('http://localhost:8000/run_once', config);
-          output.push({ x: value, accuracy: response.data.final_accuracy });
-        } catch (error) {
-          console.error(`Error during run with ${param}=${value}:`, error);
-          output.push({ x: value, accuracy: null });
+        const output = [];
+        for (let i = 0; i < values.length; i++) {
+          const value = values[i];
+      
+          const config = {
+            epsilon,
+            clip,
+            mechanism,
+            rounds,
+            numClients,
+          };
+          config[param] = value;
+      
+          setLoadingIndex(i + 1);
+      
+          try {
+            const response = await axios.post('http://localhost:8000/run_once', config);
+            output.push({ x: value, accuracy: response.data.final_accuracy });
+          } catch (error) {
+            console.error(`Error during run with ${param}=${value}:`, error);
+            output.push({ x: value, accuracy: null });
+          }
         }
-      }
-      setResults(output);
-    };
-
+      
+        // 🔁 Sort x values ascending for better chart display
+        output.sort((a, b) => a.x - b.x);
+      
+        setResults(output);
+      };
+      
     runSweeps();
   }, [param, values, epsilon, clip, mechanism, rounds, numClients]);
 

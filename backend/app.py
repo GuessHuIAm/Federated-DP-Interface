@@ -87,8 +87,9 @@ async def run_once(config: RunOnceConfig):
         clip=config.clip,
         num_clients=config.numClients,
         mechanism=config.mechanism,
-        rounds=config.rounds,
+        rounds=config.rounds
     )
+
 
     final_global_acc = None
     for global_acc, _ in sim:
