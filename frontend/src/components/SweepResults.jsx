@@ -5,48 +5,38 @@ import {
 } from '@mui/material';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Label } from 'recharts';
 
-function SweepResults({ param, values, fixed, epsilon, clip, mechanism, rounds, numClients, onBack }) {
+function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBack }) {
   const [results, setResults] = useState([]);
   const [loadingIndex, setLoadingIndex] = useState(0);
-  const hasRun = useRef(false);  // 🚫 prevent duplicate calls
+  const hasRun = useRef(false);
 
   useEffect(() => {
     if (hasRun.current) return;
     hasRun.current = true;
 
     const runSweeps = async () => {
-        const output = [];
-        for (let i = 0; i < values.length; i++) {
-          const value = values[i];
-      
-          const config = {
-            epsilon,
-            clip,
-            mechanism,
-            rounds,
-            numClients,
-          };
-          config[param] = value;
-      
-          setLoadingIndex(i + 1);
-      
-          try {
-            const response = await axios.post('http://localhost:8000/run_once', config);
-            output.push({ x: value, accuracy: response.data.final_accuracy });
-          } catch (error) {
-            console.error(`Error during run with ${param}=${value}:`, error);
-            output.push({ x: value, accuracy: null });
-          }
+      const output = [];
+      for (let i = 0; i < values.length; i++) {
+        const value = values[i];
+        const config = { epsilon, rounds, numClients };
+        config[param] = value;
+
+        setLoadingIndex(i + 1);
+        try {
+          const response = await axios.post('http://localhost:8000/run_once', config);
+          output.push({ x: value, accuracy: response.data.final_accuracy });
+        } catch (error) {
+          console.error(`Error during run with ${param}=${value}:`, error);
+          output.push({ x: value, accuracy: null });
         }
-      
-        // 🔁 Sort x values ascending for better chart display
-        output.sort((a, b) => a.x - b.x);
-      
-        setResults(output);
-      };
-      
+      }
+
+      output.sort((a, b) => a.x - b.x);
+      setResults(output);
+    };
+
     runSweeps();
-  }, [param, values, epsilon, clip, mechanism, rounds, numClients]);
+  }, [param, values, epsilon, rounds, numClients]);
 
   return (
     <Box sx={{ padding: 4, textAlign: 'center' }}>
@@ -56,8 +46,7 @@ function SweepResults({ param, values, fixed, epsilon, clip, mechanism, rounds, 
       <Typography variant="body1" gutterBottom>
         Evaluating accuracy across various <strong>{param}</strong> with values: {values.join(', ')}
       </Typography>
-      <Box sx={{ textAlign: 'center'}}>
-        {/* <Typography variant="h6">Fixed Parameters:</Typography> */}
+      <Box sx={{ textAlign: 'center' }}>
         {Object.entries(fixed).map(([key, value]) => (
           <Typography key={key} variant="body2">
             {key}: <strong>{value}</strong>

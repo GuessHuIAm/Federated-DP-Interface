@@ -6,8 +6,6 @@ import json
 import asyncio
 import time
 from pydantic import BaseModel
-from typing import Literal
-
 
 app = FastAPI()
 
@@ -19,63 +17,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ Add this back
-async def generate_stream(epsilon, clip, num_clients, mechanism, rounds):
+async def generate_stream(epsilon, num_clients, rounds):
+    sim = run_dp_federated_learning(epsilon, clip=1.0, num_clients=num_clients, mechanism="Gaussian", rounds=rounds)
     training_start_time = time.time()
-    round_start_time = training_start_time
 
-    sim = run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds)
-
-    # Initial evaluation
-    start_eval_time = time.time()
     global_acc, client_acc = next(sim)
-    end_eval_time = time.time()
-
-    initial_round_duration = end_eval_time - start_eval_time
-    total_training_time = end_eval_time - training_start_time
+    initial_time = time.time()
 
     data = {
         "round_num": 0,
         "global_accuracy": global_acc,
         "client_accuracy": client_acc,
-        "round_duration": initial_round_duration,
-        "total_training_time": total_training_time,
+        "round_duration": initial_time - training_start_time,
+        "total_training_time": initial_time - training_start_time
     }
     yield f"data: {json.dumps(data)}\n\n"
 
-    round_start_time = time.time()
-
     for round_num, (global_acc, client_acc) in enumerate(sim, start=1):
         now = time.time()
-        round_duration = now - round_start_time
-        total_training_time = now - training_start_time
-
         data = {
             "round_num": round_num,
             "global_accuracy": global_acc,
             "client_accuracy": client_acc,
-            "round_duration": round_duration,
-            "total_training_time": total_training_time
+            "round_duration": 0.0,
+            "total_training_time": now - training_start_time
         }
         yield f"data: {json.dumps(data)}\n\n"
-
-        round_start_time = time.time()
         await asyncio.sleep(0.01)
 
-# SSE endpoint
 @app.get("/stream_training")
-async def stream_training(epsilon: float, clip: float, num_clients: int, mechanism: str, rounds: int):
+async def stream_training(epsilon: float, num_clients: int, rounds: int):
     return StreamingResponse(
-        generate_stream(epsilon, clip, num_clients, mechanism, rounds),
+        generate_stream(epsilon, num_clients, rounds),
         media_type="text/event-stream"
     )
 
-# Batch (non-streaming) endpoint
 class RunOnceConfig(BaseModel):
     epsilon: float
-    clip: float
     numClients: int
-    mechanism: Literal["Gaussian", "Laplace"]
     rounds: int
 
 @app.post("/run_once")
@@ -84,12 +63,11 @@ async def run_once(config: RunOnceConfig):
 
     sim = run_dp_federated_learning(
         epsilon=config.epsilon,
-        clip=config.clip,
+        clip=1.0,
         num_clients=config.numClients,
-        mechanism=config.mechanism,
+        mechanism="Gaussian",
         rounds=config.rounds
     )
-
 
     final_global_acc = None
     for global_acc, _ in sim:

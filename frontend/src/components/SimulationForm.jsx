@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Button, Slider, Select, MenuItem, FormControl,
-  InputLabel, Typography, TextField, Tooltip
+  Button, Slider, FormControl,
+  InputLabel, Typography, TextField, Tooltip, Select, MenuItem
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SweepResults from './SweepResults';
@@ -9,9 +9,7 @@ import TrainingInfoGraphic from './TrainingInfoGraphic';
 
 function SimulationForm() {
   const [epsilon, setEpsilon] = useState(1.0);
-  const [clip, setClip] = useState(1.0);
   const [numClients, setNumClients] = useState(5);
-  const [mechanism, setMechanism] = useState('Gaussian');
   const [rounds, setRounds] = useState(5);
 
   const [sweepParam, setSweepParam] = useState('numClients');
@@ -37,9 +35,8 @@ function SimulationForm() {
       epsilon,
       numClients,
       rounds,
-      mechanism,
     };
-    
+
     delete fixedParams[sweepParam];
 
     setSweepConfig({
@@ -47,13 +44,12 @@ function SimulationForm() {
       values: parsedValues,
       fixed: fixedParams,
     });
-    
+
     setStart(true);
-    };
+  };
 
   const setDefault = (param) => {
     if (param === 'epsilon') setEpsilon(1.0);
-    else if (param === 'clip') setClip(1.0);
     else if (param === 'numClients') setNumClients(5);
     else if (param === 'rounds') setRounds(10);
   };
@@ -79,8 +75,6 @@ function SimulationForm() {
         values={sweepConfig.values}
         fixed={sweepConfig.fixed}
         epsilon={epsilon}
-        clip={clip}
-        mechanism={mechanism}
         rounds={rounds}
         numClients={numClients}
         onBack={() => setStart(false)}
@@ -112,15 +106,7 @@ function SimulationForm() {
       <TrainingInfoGraphic />
 
       <div style={{ marginTop: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>Parameter to Evaluate</Typography>
-          <Tooltip
-            title={sweepParamTooltips[sweepParam] || "Select which parameter to vary. The others will be held constant."}
-            arrow
-          >
-            <InfoOutlinedIcon fontSize="small" />
-          </Tooltip>
-        </div>
+        <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>Parameter to Evaluate</Typography>
         <FormControl fullWidth>
           <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
             <MenuItem value="numClients">Number of Clients</MenuItem>
@@ -151,7 +137,7 @@ function SimulationForm() {
       {sweepParam !== 'epsilon' && (
         <ParameterControl
           label="Privacy parameter ε"
-          tooltip="Controls how much noise is added. Lower ε = stronger privacy but may hurt model accuracy."
+          tooltip={sweepParamTooltips.epsilon}
           value={epsilon}
           onChange={setEpsilon}
           min={0.1}
@@ -164,7 +150,7 @@ function SimulationForm() {
       {sweepParam !== 'numClients' && (
         <ParameterControl
           label="Number of Clients"
-          tooltip="The number of clients participating in each round. More clients lead to more stable updates but require more communication."
+          tooltip={sweepParamTooltips.numClients}
           value={numClients}
           onChange={setNumClients}
           min={1}
@@ -177,7 +163,7 @@ function SimulationForm() {
       {sweepParam !== 'rounds' && (
         <ParameterControl
           label="Rounds"
-          tooltip="Total number of communication rounds. More rounds help the model converge but can increase total privacy loss over time."
+          tooltip={sweepParamTooltips.rounds}
           value={rounds}
           onChange={setRounds}
           min={1}
@@ -186,14 +172,6 @@ function SimulationForm() {
           paramKey="rounds"
         />
       )}
-
-      <FormControl fullWidth style={{ marginTop: '24px' }}>
-        <InputLabel>DP Mechanism</InputLabel>
-        <Select value={mechanism} onChange={(e) => setMechanism(e.target.value)}>
-          <MenuItem value="Gaussian">Gaussian</MenuItem>
-          <MenuItem value="Laplace">Laplace</MenuItem>
-        </Select>
-      </FormControl>
 
       <Button
         variant="contained"
