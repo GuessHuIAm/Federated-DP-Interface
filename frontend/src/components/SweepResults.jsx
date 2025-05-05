@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Label } from 'recharts';
 
-function SweepResults({ param, values, epsilon, clip, mechanism, rounds, numClients, onBack }) {
+function SweepResults({ param, values, fixed, epsilon, clip, mechanism, rounds, numClients, onBack }) {
   const [results, setResults] = useState([]);
   const [loadingIndex, setLoadingIndex] = useState(0);
   const hasRun = useRef(false);  // 🚫 prevent duplicate calls
@@ -50,12 +50,20 @@ function SweepResults({ param, values, epsilon, clip, mechanism, rounds, numClie
 
   return (
     <Box sx={{ padding: 4, textAlign: 'center' }}>
-      <Typography variant="h5" gutterBottom>
+      <Typography variant="h4" gutterBottom>
         Parameter Evaluation Results
       </Typography>
       <Typography variant="body1" gutterBottom>
         Evaluating accuracy across various <strong>{param}</strong> with values: {values.join(', ')}
       </Typography>
+      <Box sx={{ textAlign: 'center'}}>
+        {/* <Typography variant="h6">Fixed Parameters:</Typography> */}
+        {Object.entries(fixed).map(([key, value]) => (
+          <Typography key={key} variant="body2">
+            {key}: <strong>{value}</strong>
+          </Typography>
+        ))}
+      </Box>
 
       {results.length < values.length ? (
         <Box sx={{ mt: 4 }}>

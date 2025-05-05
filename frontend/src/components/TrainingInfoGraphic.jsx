@@ -49,13 +49,11 @@ const steps = [
 ];
 
 function TrainingInfoGraphic() {
-  const [_, setCurrentSlide] = useState(0);
+  const [currentSlide, setCurrentSlide] = useState(0);
 
   const settings = {
     dots: true,
     infinite: true,
-    centerMode: true,
-    centerPadding: '25%',
     speed: 500,
     slidesToShow: 1,
     slidesToScroll: 1,
@@ -65,12 +63,19 @@ function TrainingInfoGraphic() {
     autoplaySpeed: 3000,
     beforeChange: (_, newIndex) => setCurrentSlide(newIndex),
     prevArrow: <PrevArrow />,
-    nextArrow: <NextArrow />
+    nextArrow: <NextArrow />,
+    adaptiveHeight: true,       
+    centerMode: false,         
+    centerPadding: '0px',      
   };
+  
 
   return (
     <BaseButtonModal buttonText="What Happens During Training?" title="How Your Data Trains the Model">
       <div>
+      <Typography variant="subtitle1" align="center" style={{fontWeight: "bold"}}>
+        Step {currentSlide + 1} 
+      </Typography>
         <Slider {...settings}>
           {steps.map((step, _) => {
             const IconComponent = step.Icon;

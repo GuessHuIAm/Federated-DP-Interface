@@ -33,9 +33,23 @@ function SimulationForm() {
       return;
     }
 
-    setSweepConfig({ param: sweepParam, values: parsedValues });
+    const fixedParams = {
+      epsilon,
+      numClients,
+      rounds,
+      mechanism,
+    };
+    
+    delete fixedParams[sweepParam];
+
+    setSweepConfig({
+      param: sweepParam,
+      values: parsedValues,
+      fixed: fixedParams,
+    });
+    
     setStart(true);
-  };
+    };
 
   const setDefault = (param) => {
     if (param === 'epsilon') setEpsilon(1.0);
@@ -63,6 +77,7 @@ function SimulationForm() {
       <SweepResults
         param={sweepConfig.param}
         values={sweepConfig.values}
+        fixed={sweepConfig.fixed}
         epsilon={epsilon}
         clip={clip}
         mechanism={mechanism}
