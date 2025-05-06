@@ -113,7 +113,7 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
               dataKey="round"
               label={{ value: 'Round', position: 'insideBottom', offset: -5 }}
             />
-            <YAxis label={{ value: 'Noise (ℓ₂‑norm)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
+            <YAxis label={{ value: 'Noise', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
             <Tooltip />
             <Legend verticalAlign="top" align="right" />
 
@@ -124,6 +124,7 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
                 dataKey={`noise_${r.x}`}
                 stroke={`hsl(${(idx * 67) % 360},70%,50%)`}   // quick distinct colours
                 name={`${param} = ${r.x}`}
+                formatter={(v) => v != null ? `${(v).toFixed(2)}` : 'Error'}
                 connectNulls
               />
             ))}
