@@ -92,7 +92,7 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
           </Typography>
 
           <Typography variant="h6" sx={{ mt: 6, mb: 1 }}>
-            Average noise magnitude per sweep
+            Average Noise Added
           </Typography>
           <LineChart
             width={700}

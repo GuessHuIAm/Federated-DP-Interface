@@ -11,8 +11,14 @@ function SimulationForm() {
   const [numClients, setNumClients] = useState(5);
   const [rounds, setRounds] = useState(5);
 
+  const defaultSweepValues = {
+    epsilon: '0.5,1,2,5,10',
+    numClients: '2,5,10,20',
+    rounds: '1,5,10,20,50',
+  };
+
   const [sweepParam, setSweepParam] = useState('numClients');
-  const [sweepValues, setSweepValues] = useState('2,4,6,8');
+  const [sweepValues, setSweepValues] = useState(defaultSweepValues['numClients']);
   const [start, setStart] = useState(false);
   const [sweepConfig, setSweepConfig] = useState(null);
 
@@ -107,11 +113,18 @@ function SimulationForm() {
       <div style={{ marginTop: '24px' }}>
         <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>Parameter to Evaluate</Typography>
         <FormControl fullWidth>
-          <Select value={sweepParam} onChange={(e) => setSweepParam(e.target.value)}>
-            <MenuItem value="numClients">Number of Clients</MenuItem>
-            <MenuItem value="epsilon">Epsilon</MenuItem>
-            <MenuItem value="rounds">Rounds</MenuItem>
-          </Select>
+        <Select
+          value={sweepParam}
+          onChange={(e) => {
+            const newParam = e.target.value;
+            setSweepParam(newParam);
+            setSweepValues(defaultSweepValues[newParam]);
+          }}
+        >
+          <MenuItem value="numClients">Number of Clients</MenuItem>
+          <MenuItem value="epsilon">Epsilon</MenuItem>
+          <MenuItem value="rounds">Rounds</MenuItem>
+        </Select>
         </FormControl>
       </div>
 
