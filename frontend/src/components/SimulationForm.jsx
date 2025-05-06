@@ -93,7 +93,7 @@ function SimulationForm() {
         </div>
         <Button size="small" onClick={() => setDefault(paramKey)}>Set Default</Button>
       </div>
-      <Slider value={value} min={min} max={max} step={step} onChange={(e, val) => onChange(val)} valueLabelDisplay="auto" />
+      <Slider value={value} min={min} max={max} step={step} onChange={(e, val) => onChange(val)} valueLabelDisplay="on" />
     </>
   );
 
