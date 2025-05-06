@@ -11,9 +11,9 @@ memory = Memory(CACHE_DIR, verbose=0)
 run_dp_federated_learning = memory.cache(run_dp_federated_learning)
 
 PARAM_GRID = {
-    "epsilon":      np.round(np.arange(0.1, 10.1, 0.5), 2).tolist(),
+    "epsilon":      np.round(np.arange(1, 10, 0.5), 2).tolist(),
     "num_clients":  [i for i in range(5, 50, 5)],
-    "rounds":       [i for i in range(5, 101, 10)],
+    "rounds":       [i for i in range(5, 100, 10)],
     "dp_noise":     [True, False],
 }
 
