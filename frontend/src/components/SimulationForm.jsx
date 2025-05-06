@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Button, Slider, FormControl,
-  InputLabel, Typography, TextField, Tooltip, Select, MenuItem
+  Button, Slider, FormControl, Typography, TextField, Tooltip, Select, MenuItem
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SweepResults from './SweepResults';

@@ -44,7 +44,7 @@ class CardioDataset(Dataset):
         print(df.shape)
 
         # Subsample the dataset to 10,000 rows
-        df = df.sample(n=10000, random_state=0).reset_index(drop=True)
+        df = df.sample(n=1000, random_state=0).reset_index(drop=True)
 
         # Preprocess the dataset
         df = auto_encode_categoricals(df)

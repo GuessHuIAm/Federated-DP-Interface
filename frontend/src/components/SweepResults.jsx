@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Typography, CircularProgress, Button, Box
 } from '@mui/material';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Label } from 'recharts';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Label, Legend } from 'recharts';
 
 function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBack }) {
   const [results, setResults] = useState([]);
@@ -24,7 +24,11 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
         setLoadingIndex(i + 1);
         try {
           const response = await axios.post('http://localhost:8000/run_once', config);
-          output.push({ x: value, accuracy: response.data.final_accuracy });
+          output.push({
+            x: value,
+            dp_accuracy: response.data.dp_final_accuracy,
+            non_dp_accuracy: response.data.non_dp_final_accuracy
+          });
         } catch (error) {
           console.error(`Error during run with ${param}=${value}:`, error);
           output.push({ x: value, accuracy: null });
@@ -63,7 +67,7 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
         </Box>
       ) : (
         <>
-          <LineChart width={700} height={400} data={results}>
+          <LineChart width={700} height={400} data={results} margin={{ bottom: 40 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="x" label={{ value: param, position: 'insideBottom', offset: -5 }} />
             <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}>
@@ -72,13 +76,9 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
               </Label>
             </YAxis>
             <Tooltip formatter={(v) => v != null ? `${(v * 100).toFixed(2)}%` : 'Error'} />
-            <Line
-              type="monotone"
-              dataKey="accuracy"
-              stroke="#8884d8"
-              name="Final Accuracy"
-              connectNulls
-            />
+            <Line dataKey="dp_accuracy" stroke="#8884d8" name="With DP Noise" connectNulls />
+            <Line dataKey="non_dp_accuracy" stroke="#82ca9d" name="Without DP Noise" connectNulls />
+            <Legend verticalAlign="top" align="right" />
           </LineChart>
           <Typography variant="caption" display="block" sx={{ mt: 2 }}>
             Accuracy is reported after final round of training for each parameter setting.
