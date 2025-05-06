@@ -10,6 +10,19 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
   const [loadingIndex, setLoadingIndex] = useState(0);
   const hasRun = useRef(false);
 
+  const buildNoiseSeries = React.useCallback((res) => {
+    if (res.length === 0) return [];
+    const maxRounds = Math.max(...res.map(r => r.noise?.length ?? 0));
+
+    return Array.from({ length: maxRounds }, (_, i) => {
+      const row = { round: i + 1 };
+      res.forEach(r => { row[`noise_${r.x}`] = r.noise?.[i] ?? null; });
+      return row;
+    });
+  }, []);
+
+  const noiseData = React.useMemo(() => buildNoiseSeries(results), [results, buildNoiseSeries]);
+
   useEffect(() => {
     if (hasRun.current) return;
     hasRun.current = true;
@@ -23,12 +36,14 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
 
         setLoadingIndex(i + 1);
         try {
-          const response = await axios.post('http://localhost:8000/run_once', config);
+          const response = await axios.post('http://localhost:8000/run', config);
           output.push({
             x: value,
             dp_accuracy: response.data.dp_final_accuracy,
-            non_dp_accuracy: response.data.non_dp_final_accuracy
+            non_dp_accuracy: response.data.non_dp_final_accuracy,
+            noise: response.data.noise_magnitudes
           });
+          console.log(`noise: ${response.data.noise_magnitudes}`);
         } catch (error) {
           console.error(`Error during run with ${param}=${value}:`, error);
           output.push({ x: value, accuracy: null });
@@ -83,6 +98,36 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
           <Typography variant="caption" display="block" sx={{ mt: 2 }}>
             Accuracy is reported after final round of training for each parameter setting.
           </Typography>
+
+          <Typography variant="h6" sx={{ mt: 6, mb: 1 }}>
+            Average noise magnitude injected each round
+            </Typography>
+            <LineChart
+            width={700}
+            height={400}
+            data={noiseData}
+            margin={{ bottom: 40 }}
+            >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="round"
+              label={{ value: 'Round', position: 'insideBottom', offset: -5 }}
+            />
+            <YAxis label={{ value: 'Noise (ℓ₂‑norm)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
+            <Tooltip />
+            <Legend verticalAlign="top" align="right" />
+
+            {/* one <Line> per sweep value */}
+            {results.map((r, idx) => (
+              <Line
+                key={r.x}
+                dataKey={`noise_${r.x}`}
+                stroke={`hsl(${(idx * 67) % 360},70%,50%)`}   // quick distinct colours
+                name={`${param} = ${r.x}`}
+                connectNulls
+              />
+            ))}
+            </LineChart>
         </>
       )}
 

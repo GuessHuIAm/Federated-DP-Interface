@@ -74,6 +74,7 @@ class CardioMLP(nn.Module):
 
 # Add Gaussian or Laplace noise to model gradients
 def add_dp_noise(model, scale, mechanism="Gaussian"):
+    total_norm = 0.0
     for param in model.parameters():
         if param.grad is None:
             continue
@@ -82,6 +83,8 @@ def add_dp_noise(model, scale, mechanism="Gaussian"):
         else:
             noise = torch.distributions.Laplace(0, scale).sample(param.grad.shape).to(param.device)
         param.grad += noise
+        total_norm += param.grad.norm().item()
+    return total_norm
 
 # Federated Learning Simulation
 def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epochs_per_client=5, delta = 1e-5, dp_noise=True):
@@ -112,6 +115,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
 
     # Bookkeeping for global and client accuracy
     global_acc = []
+    average_noise_magnitudes = []
     client_acc_history = [[] for _ in range(num_clients)]
 
     # Split train dataset among clients
@@ -139,6 +143,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
     for rnd in range(rounds):
         client_models = []
         client_sizes = []
+        round_noise = 0
 
         # Each client trains its local model
         for i, dataloader in enumerate(client_dataloaders):
@@ -150,6 +155,7 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
             local_loss = 0
+            client_noise = 0
             for _ in range(epochs_per_client):
                 for features, labels in dataloader:
                     features, labels = features.to(device), labels.to(device)
@@ -163,14 +169,17 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
                         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
                         T = rounds * epochs_per_client * len(dataloader) 
                         scale = (1 / epsilon) * math.sqrt(2 * math.log(1.25 / delta)) * math.sqrt(T)
-                        add_dp_noise(model, scale=scale, mechanism=mechanism)
+                        noise_norm = add_dp_noise(model, scale=scale, mechanism=mechanism)
+                        client_noise += noise_norm
                     optimizer.step()
-
                     local_loss += loss.item()
+            
             scheduler.step()
 
             client_models.append(model.state_dict())
             client_sizes.append(len(dataloader.dataset))
+            
+            round_noise += client_noise / (epochs_per_client * len(dataloader))
 
             # Evaluate individual client model
             model.eval()
@@ -183,8 +192,9 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
 
-            # print(f"Round {rnd+1}, Client {i}: Local Accuracy = {correct/total:.4f}, Avg Loss = {local_loss/len(test_loader):.4f}")
             client_acc_history[i].append(correct / total)
+        
+        average_noise_magnitudes.append(round_noise / num_clients)
 
         # Weighted aggregation
         total_samples = sum(client_sizes)
@@ -210,5 +220,6 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
         global_acc.append(correct / total)
         print(f"Round {rnd+1}: Global Accuracy: {correct / total:.4f}")
 
+    if dp_noise:
+        return global_acc, client_acc_history, average_noise_magnitudes
     return global_acc, client_acc_history
-        # yield global_acc.copy(), [acc.copy() for acc in client_acc_history]

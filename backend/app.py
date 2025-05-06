@@ -13,17 +13,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class RunOnceConfig(BaseModel):
+class RunConfig(BaseModel):
     epsilon: float
     numClients: int
     rounds: int
 
-@app.post("/run_once")
-async def run_once(config: RunOnceConfig):
-    print("[DEBUG] /run_once hit with:", config)
+@app.post("/run")
+async def run(config: RunConfig):
+    print("[DEBUG] /run hit with:", config)
     
     # With DP noise
-    dp_acc, _ = run_dp_federated_learning(
+    dp_acc, _, noises = run_dp_federated_learning(
         epsilon=config.epsilon,
         clip=1,
         num_clients=config.numClients,
@@ -44,5 +44,6 @@ async def run_once(config: RunOnceConfig):
 
     return {
         "dp_final_accuracy": dp_acc[-1],
-        "non_dp_final_accuracy": non_dp_acc[-1]
+        "non_dp_final_accuracy": non_dp_acc[-1],
+        "noise_magnitudes": noises,
     }
