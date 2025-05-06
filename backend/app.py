@@ -60,18 +60,14 @@ class RunOnceConfig(BaseModel):
 @app.post("/run_once")
 async def run_once(config: RunOnceConfig):
     print("[DEBUG] /run_once hit with:", config)
-
-    sim = run_dp_federated_learning(
+    
+    global_acc, _ = run_dp_federated_learning(
         epsilon=config.epsilon,
-        clip=1.0,
+        clip=1,
         num_clients=config.numClients,
         mechanism="Gaussian",
-        rounds=config.rounds
+        rounds=config.rounds,
     )
-
-    final_global_acc = None
-    for global_acc, _ in sim:
-        final_global_acc = global_acc
-
-    print(f"[DEBUG] Final Accuracy: {final_global_acc[-1]}")
-    return {"final_accuracy": final_global_acc[-1]}
+    final_acc = global_acc[-1]
+    print(f"Final Accuracy: {final_acc}")
+    return {"final_accuracy": final_acc}

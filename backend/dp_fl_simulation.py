@@ -1,171 +1,192 @@
-# Update the full federated learning script to use a fixed noise multiplier with privacy accounting
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import pandas as pd
-import numpy as np
+import logging
+import pathlib
 import random
-from torch.utils.data import Dataset, DataLoader, Subset
+import math
+from torch.utils.data import Dataset, DataLoader, random_split
+import kagglehub
+from typing import Union
 
-# Custom RDP accountant
-class SimpleRDPAccountant:
-    def __init__(self, alphas=None):
-        if alphas is None:
-            self.alphas = np.arange(1.1, 10.0, 0.1).tolist() + list(range(10, 100))
-        else:
-            self.alphas = alphas
-        self.steps = 0
-        self.total_rdp = np.zeros(len(self.alphas))
+def _ensure_cardio_csv() -> pathlib.Path:
+    # Check if the dataset is already downloaded from Kaggle
+    cache_dir = kagglehub.dataset_download("kamilpytlak/personal-key-indicators-of-heart-disease")
+    cache_dir = pathlib.Path(cache_dir)
+    
+    # Search recursively for the .csv file
+    matches = list(cache_dir.rglob("heart_2020_cleaned.csv"))
+    if not matches:
+        raise FileNotFoundError("heart_2020_cleaned.csv not found in Kaggle bundle")
+    
+    return matches[0]  # Return first match
 
-    def _compute_rdp(self, q, noise_multiplier, steps):
-        if noise_multiplier == 0:
-            return np.inf * np.ones_like(self.alphas)
-        orders = np.array(self.alphas)
-        rdp = np.array([self._compute_rdp_scalar(q, noise_multiplier, order) for order in orders])
-        return rdp * steps
+def auto_encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert categorical columns to numerical using integer encoding."""
+    df = df.copy()
+    for col in df.columns:
+        try:
+            if df[col].dtype == "object" or isinstance(df[col].dtype, pd.CategoricalDtype):
+                uniques = df[col].dropna().unique()
+                mapping = {val: idx for idx, val in enumerate(uniques)}
+                df[col] = df[col].map(mapping)
+        except Exception as e:
+            logging.warning(f"Failed to encode column {col}: {e}")
+            continue
+    return df.astype("float32")
 
-    def _compute_rdp_scalar(self, q, sigma, alpha):
-        if q == 0:
-            return 0
-        if sigma == 0:
-            return np.inf
-        if q == 1.0:
-            return alpha / (2 * sigma ** 2)
-        return (1 / (alpha - 1)) * np.log(q * ((alpha - 1) / (sigma ** 2)) ** 0.5 + (1 - q))
 
-    def step(self, noise_multiplier, sample_rate):
-        self.steps += 1
-        self.total_rdp += self._compute_rdp(sample_rate, noise_multiplier, 1)
+class CardioDataset(Dataset):
+    """Dataset for heart disease prediction."""
+    def __init__(self, csv_path: Union[str, pathlib.Path]):
+        # Read in the dataset
+        df = pd.read_csv(csv_path, sep=",")
+        print(df.shape)
 
-    def get_epsilon(self, delta):
-        epsilons = self.total_rdp - np.log(delta) / (np.array(self.alphas) - 1)
-        # print ("Epsilons:", epsilons)
-        idx = np.argmin(epsilons)
-        return epsilons[idx], self.alphas[idx]
+        # Subsample the dataset to 10,000 rows
+        df = df.sample(n=10000, random_state=0).reset_index(drop=True)
 
-# Dataset class
-class HeartAttackDataset(Dataset):
-    def __init__(self, csv_file):
-        data = pd.read_csv(csv_file)
-        categorical_cols = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
-        data = pd.get_dummies(data, columns=categorical_cols)
-        self.X = data.drop(columns=['HeartDisease']).values.astype(np.float32)
-        self.y = data['HeartDisease'].values.astype(np.float32)
-        self.X = (self.X - self.X.mean(axis=0)) / (self.X.std(axis=0) + 1e-6)
+        # Preprocess the dataset
+        df = auto_encode_categoricals(df)
+        self.y = df["HeartDisease"].to_numpy(dtype="float32")
+        self.X = (
+            df.drop(columns=["HeartDisease"])
+              .astype("float32")
+              .to_numpy()
+        )
+        self.X = (self.X - self.X.mean(0)) / (self.X.std(0) + 1e-6)
 
-    def __len__(self):
-        return len(self.y)
-
+    def __len__(self):  return len(self.y)
     def __getitem__(self, idx):
         return torch.tensor(self.X[idx]), torch.tensor(self.y[idx])
 
-# MLP model
-class HeartAttackMLP(nn.Module):
-    def __init__(self, input_dim):
+class CardioMLP(nn.Module):
+    def __init__(self, d_in):
         super().__init__()
-        self.fc1 = nn.Linear(input_dim, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 32)
-        self.fc4 = nn.Linear(32, 1)
-
+        self.net = nn.Sequential(
+            nn.Linear(d_in, 128), nn.ReLU(),
+            nn.Linear(128, 64),   nn.ReLU(),
+            nn.Linear(64, 32),    nn.ReLU(),
+            nn.Linear(32, 1),     # logit
+        )
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        return torch.sigmoid(self.fc4(x)).squeeze()
+        return self.net(x).squeeze()
 
-# Add DP noise with fixed noise multiplier
-def add_dp_noise(model, scale):
+# Add Gaussian or Laplace noise to model gradients
+def add_dp_noise(model, scale, mechanism="Gaussian"):
     for param in model.parameters():
-        if param.requires_grad:
+        if param.grad is None:
+            continue
+        if mechanism == "Gaussian":
             noise = torch.normal(0, scale, size=param.grad.shape).to(param.device)
-            param.grad += noise
+        else:
+            noise = torch.distributions.Laplace(0, scale).sample(param.grad.shape).to(param.device)
+        param.grad += noise
 
-# Federated learning with privacy accountant
-def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, delta=1e-5):
+# Federated Learning Simulation
+def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epochs_per_client=5, delta = 1e-5, dp_noise=True):
+    torch.manual_seed(0) # For reproducibility
+    random.seed(0)
+    
+    logging.info("Starting DP Federated Learning Simulation")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Heuristic conversion from epsilon to noise multiplier
-    noise_multiplier = 1.0 / epsilon  # You can tune this
-
     # Load dataset
-    dataset = HeartAttackDataset("./datasets/heart.csv")
-    train_size = int(0.8 * len(dataset))
+    dataset = CardioDataset(_ensure_cardio_csv())
+
+    # Train/Test Split
+    train_size = int(0.7 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
+
     test_loader = DataLoader(test_dataset, batch_size=64)
+    
+    print(f"Train size: {len(train_dataset)}, Test size: {len(test_dataset)}")
+    print(f"Number of clients: {num_clients}, Rounds: {rounds}, Epsilon: {epsilon}, Mechanism: {mechanism}")
+    print(f"Clip: {clip}, Delta: {delta}, Epochs per client: {epochs_per_client}")
 
+    # Initiate global model
     input_dim = dataset.X.shape[1]
-    global_model = HeartAttackMLP(input_dim).to(device)
-    criterion = nn.BCELoss()
+    global_model = CardioMLP(input_dim).to(device)
+    criterion = nn.BCEWithLogitsLoss()
 
-    data_per_client = len(train_dataset) // num_clients
-    client_dataloaders = [
-        DataLoader(Subset(train_dataset, list(range(i * data_per_client, (i + 1) * data_per_client))),
-                   batch_size=64, shuffle=True)
-        for i in range(num_clients)
-    ]
-
+    # Bookkeeping for global and client accuracy
     global_acc = []
     client_acc_history = [[] for _ in range(num_clients)]
 
-    accountant = SimpleRDPAccountant()
-    sample_rate = 1.0  # assuming all clients participate each round
+    # Split train dataset among clients
+    rows_pc = len(train_dataset) // num_clients
+    splits = [rows_pc] * (num_clients - 1) + [len(train_dataset) - rows_pc * (num_clients - 1)]
+    subsets = random_split(train_dataset, splits)
+    client_dataloaders = [DataLoader(s, batch_size=64, shuffle=True) for s in subsets]
 
-    # Initial global evaluation
+    # Initial evaluation
     global_model.eval()
     correct, total = 0, 0
     with torch.no_grad():
         for features, labels in test_loader:
             features, labels = features.to(device), labels.to(device)
             outputs = global_model(features)
-            predicted = (outputs > 0.5).float()
+            predicted = (torch.sigmoid(outputs) > 0.5).float()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-    global_acc.append(correct / total)
-    yield global_acc.copy(), [[] for _ in range(num_clients)]
 
+    global_acc.append(correct / total)
+    print(f"Initial Global Accuracy: {correct / total:.4f}")
+    # yield global_acc.copy(), [[] for _ in range(num_clients)]
+
+    # For each communication round
     for rnd in range(rounds):
         client_models = []
         client_sizes = []
 
+        # Each client trains its local model
         for i, dataloader in enumerate(client_dataloaders):
-            model = HeartAttackMLP(input_dim).to(device)
+            model = CardioMLP(input_dim).to(device)
             model.load_state_dict(global_model.state_dict())
             model.train()
 
-            optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
+            optimizer = torch.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
-            for epoch in range(5):
+            local_loss = 0
+            for _ in range(epochs_per_client):
                 for features, labels in dataloader:
                     features, labels = features.to(device), labels.to(device)
                     optimizer.zero_grad()
                     outputs = model(features)
                     loss = criterion(outputs, labels)
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-                    add_dp_noise(model, noise_multiplier * clip)
+
+                    # Add DP noise
+                    if dp_noise:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+                        T = rounds * epochs_per_client * len(dataloader) 
+                        scale = (1 / epsilon) * math.sqrt(2 * math.log(1.25 / delta)) * math.sqrt(T)
+                        add_dp_noise(model, scale=scale, mechanism=mechanism)
                     optimizer.step()
-                scheduler.step()
+
+                    local_loss += loss.item()
+            scheduler.step()
 
             client_models.append(model.state_dict())
             client_sizes.append(len(dataloader.dataset))
 
-            # Evaluate client model
+            # Evaluate individual client model
             model.eval()
             correct, total = 0, 0
             with torch.no_grad():
-                for features, labels in dataloader:
+                for features, labels in test_loader:
                     features, labels = features.to(device), labels.to(device)
                     outputs = model(features)
-                    predicted = (outputs > 0.5).float()
+                    predicted = (torch.sigmoid(outputs) > 0.5).float()
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
+
+            # print(f"Round {rnd+1}, Client {i}: Local Accuracy = {correct/total:.4f}, Avg Loss = {local_loss/len(test_loader):.4f}")
             client_acc_history[i].append(correct / total)
 
-        # Aggregate client updates
+        # Weighted aggregation
         total_samples = sum(client_sizes)
         new_state_dict = {}
         for key in global_model.state_dict().keys():
@@ -182,16 +203,12 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, del
             for features, labels in test_loader:
                 features, labels = features.to(device), labels.to(device)
                 outputs = global_model(features)
-                predicted = (outputs > 0.5).float()
+                predicted = (torch.sigmoid(outputs) > 0.5).float()
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
+
         global_acc.append(correct / total)
+        print(f"Round {rnd+1}: Global Accuracy: {correct / total:.4f}")
 
-        accountant.step(noise_multiplier=noise_multiplier, sample_rate=sample_rate)
-        # print(f"Round {rnd+1}: Global Accuracy = {correct / total:.4f}")
-
-        yield global_acc.copy(), [acc.copy() for acc in client_acc_history]
-
-    # Final privacy cost
-    epsilon_final, best_alpha = accountant.get_epsilon(delta)
-    print(f"\nFinal ε after {rounds} rounds: ε = {epsilon_final:.4f} at α = {best_alpha}")
+    return global_acc, client_acc_history
+        # yield global_acc.copy(), [acc.copy() for acc in client_acc_history]
