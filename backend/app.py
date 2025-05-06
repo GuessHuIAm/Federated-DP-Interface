@@ -23,7 +23,7 @@ async def run(config: RunConfig):
     print("[DEBUG] /run hit with:", config)
     
     # With DP noise
-    dp_acc, _, noises = run_dp_federated_learning(
+    dp_acc, _, noise = run_dp_federated_learning(
         epsilon=config.epsilon,
         clip=1,
         num_clients=config.numClients,
@@ -45,5 +45,5 @@ async def run(config: RunConfig):
     return {
         "dp_final_accuracy": dp_acc[-1],
         "non_dp_final_accuracy": non_dp_acc[-1],
-        "noise_magnitudes": noises,
+        "average_noise": noise,
     }

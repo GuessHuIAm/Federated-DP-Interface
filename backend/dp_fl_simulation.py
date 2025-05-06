@@ -221,5 +221,6 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
         print(f"Round {rnd+1}: Global Accuracy: {correct / total:.4f}")
 
     if dp_noise:
-        return global_acc, client_acc_history, average_noise_magnitudes
+        average_noise = sum(average_noise_magnitudes) / len(average_noise_magnitudes)
+        return global_acc, client_acc_history, average_noise
     return global_acc, client_acc_history

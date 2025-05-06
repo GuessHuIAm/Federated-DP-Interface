@@ -10,19 +10,6 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
   const [loadingIndex, setLoadingIndex] = useState(0);
   const hasRun = useRef(false);
 
-  const buildNoiseSeries = React.useCallback((res) => {
-    if (res.length === 0) return [];
-    const maxRounds = Math.max(...res.map(r => r.noise?.length ?? 0));
-
-    return Array.from({ length: maxRounds }, (_, i) => {
-      const row = { round: i + 1 };
-      res.forEach(r => { row[`noise_${r.x}`] = r.noise?.[i] ?? null; });
-      return row;
-    });
-  }, []);
-
-  const noiseData = React.useMemo(() => buildNoiseSeries(results), [results, buildNoiseSeries]);
-
   useEffect(() => {
     if (hasRun.current) return;
     hasRun.current = true;
@@ -38,12 +25,11 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
         try {
           const response = await axios.post('http://localhost:8000/run', config);
           output.push({
-            x: value,
+            x: Number(value),
             dp_accuracy: response.data.dp_final_accuracy,
             non_dp_accuracy: response.data.non_dp_final_accuracy,
-            noise: response.data.noise_magnitudes
+            noise: response.data.average_noise
           });
-          console.log(`noise: ${response.data.noise_magnitudes}`);
         } catch (error) {
           console.error(`Error during run with ${param}=${value}:`, error);
           output.push({ x: value, accuracy: null });
@@ -84,7 +70,13 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
         <>
           <LineChart width={700} height={400} data={results} margin={{ bottom: 40 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="x" label={{ value: param, position: 'insideBottom', offset: -5 }} />
+            <XAxis
+              dataKey="x"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              ticks={values.map(Number)}
+              label={{ value: param, position: 'insideBottom', offset: -5 }}
+            />
             <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}>
               <Label angle={-90} position="insideLeft" style={{ textAnchor: 'middle' }}>
                 Final Accuracy
@@ -100,35 +92,34 @@ function SweepResults({ param, values, fixed, epsilon, rounds, numClients, onBac
           </Typography>
 
           <Typography variant="h6" sx={{ mt: 6, mb: 1 }}>
-            Average noise magnitude injected each round
-            </Typography>
-            <LineChart
+            Average noise magnitude per sweep
+          </Typography>
+          <LineChart
             width={700}
             height={400}
-            data={noiseData}
+            data={results}
             margin={{ bottom: 40 }}
-            >
+          >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
-              dataKey="round"
-              label={{ value: 'Round', position: 'insideBottom', offset: -5 }}
+              dataKey="x"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              ticks={values.map(Number)}
+              label={{ value: param, position: 'insideBottom', offset: -5 }}
             />
-            <YAxis label={{ value: 'Noise', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
-            <Tooltip />
-            <Legend verticalAlign="top" align="right" />
+            <YAxis
+              label={{
+                value: 'Average Noise',
+                angle: -90,
+                position: 'insideLeft',
+                style: { textAnchor: 'middle' }
+              }}
+            />
+            <Tooltip formatter={(v) => v != null ? v.toFixed(3) : 'Error'} />
+            <Line dataKey="noise" stroke="#82ca9d" name="Average Noise" connectNulls />
+          </LineChart>
 
-            {/* one <Line> per sweep value */}
-            {results.map((r, idx) => (
-              <Line
-                key={r.x}
-                dataKey={`noise_${r.x}`}
-                stroke={`hsl(${(idx * 67) % 360},70%,50%)`}   // quick distinct colours
-                name={`${param} = ${r.x}`}
-                formatter={(v) => v != null ? `${(v).toFixed(2)}` : 'Error'}
-                connectNulls
-              />
-            ))}
-            </LineChart>
         </>
       )}
 
