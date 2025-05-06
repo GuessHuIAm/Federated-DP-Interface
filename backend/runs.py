@@ -38,50 +38,73 @@ def save_config(run_folder):
     with open(os.path.join(run_folder, "config.yaml"), "w") as f:
         yaml.dump(config, f)
 
-# # Run the federated learning simulation
-# run_dp_federated_learning(EPSILON, CLIP, NUM_CLIENTS, MECHANISM, ROUNDS,
-#                           epochs_per_client=EPOCHS_PER_CLIENT, delta=DELTA,
-#                           dp_noise=DP_NOISE)
-
-# Save the model plots
-def run():
-    # Create subfolder for run of information
-    run_folder = create_run_subfolder()
-    save_config(run_folder)
-
-    # Run one simulation
-    global_acc, client_acc = run_dp_federated_learning(
-        EPSILON, CLIP, NUM_CLIENTS, MECHANISM, ROUNDS,
-        epochs_per_client=EPOCHS_PER_CLIENT, delta=DELTA,
-        dp_noise=DP_NOISE
-    )
-    
-    # Save accuracy histories as json
+# Save global and client accuracies to JSON files
+def save_accuracies(run_folder, global_acc, client_acc):
     with open(os.path.join(run_folder, "global_acc.json"), "w") as f:
         json.dump(global_acc, f)
     with open(os.path.join(run_folder, "client_acc.json"), "w") as f:
         json.dump(client_acc, f)
 
-    # Save the model plots
-    plt.figure()
-    plt.plot(global_acc, label="Global Model Accuracy")
-    plt.title("Global Model Accuracy")
-    plt.xlabel("Rounds")
-    plt.ylabel("Accuracy")
-    plt.legend()
-    plt.savefig(os.path.join(run_folder, "global_acc.png"))
-    plt.close()
+# run_folder = create_run_subfolder()
+# save_config(run_folder)
 
-    # Plot all the client accuracies on one plot
-    plt.figure()
-    for i, client_acc_i in enumerate(client_acc):
-        plt.plot(client_acc_i, label=f"Client {i+1}", color=plt.cm.tab10(i))
-    plt.title("Client Model Accuracies")
-    plt.xlabel("Rounds")
-    plt.ylabel("Accuracy")
-    plt.legend()
-    plt.savefig(os.path.join(run_folder, "client_acc.png"))
-    plt.close()
-    print(f"Run completed. Results saved in {run_folder}")
+# # Run the federated learning simulation
+# global_acc, client_acc = run_dp_federated_learning(EPSILON, CLIP, NUM_CLIENTS, MECHANISM, ROUNDS,
+#                           epochs_per_client=EPOCHS_PER_CLIENT, delta=DELTA,
+#                           dp_noise=DP_NOISE)
 
-run()
+# save_accuracies(run_folder, global_acc, client_acc)
+
+var = "clients"
+path = f"runs/{var}"
+vars = []
+global_accs = []
+
+for folder in os.listdir(path):
+    # Continue if not a folder
+    if not os.path.isdir(os.path.join(path, folder)):
+        continue
+
+    # Get config
+    config_path = os.path.join(path, folder, "config.yaml")
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    ROUNDS = config["rounds"]
+    EPSILON = config["epsilon"]
+    CLIENTS = config["num_clients"]
+    if var == "clients":
+        var_value = CLIENTS
+    elif var == "epsilon":
+        var_value = EPSILON
+    elif var == "rounds":
+        var_value = ROUNDS
+    else:
+        pass
+    vars.append(var_value)
+
+    # Get global accuracy
+    json_path = os.path.join(path, folder, "global_acc.json")
+    with open(json_path, "r") as f:
+        global_acc = list(json.load(f))[-1]
+    global_accs.append(global_acc)
+
+# Sort rounds
+vars, global_accs = zip(*sorted(zip(vars, global_accs), key=lambda x: x[0]))
+
+# Plotting
+plt.figure(figsize=(10, 5))
+plt.plot(vars, global_accs, label="Global Accuracy")
+# Draw curved line
+plt.xlabel(var)
+plt.ylabel("Accuracy")
+if var == "rounds":
+    plt.title(f"Rounds (epsilon={EPSILON}, clients={CLIENTS})")
+elif var == "epsilon":
+    plt.title(f"Epsilon (rounds={ROUNDS}, clients={CLIENTS})")
+elif var == "clients":
+    plt.title(f"Clients (epsilon={EPSILON}, rounds={ROUNDS})")
+else:
+    pass
+plt.legend()
+plt.grid()
+plt.savefig(os.path.join(path, "global_accuracy_plot.png"))

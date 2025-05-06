@@ -3,12 +3,14 @@ import torch.nn as nn
 import pandas as pd
 import logging
 import pathlib
+import random
 import math
 from torch.utils.data import Dataset, DataLoader, random_split
 import kagglehub
 from typing import Union
 
 torch.manual_seed(0) # For reproducibility
+random.seed(0)
 
 def _ensure_cardio_csv() -> pathlib.Path:
     # Check if the dataset is already downloaded from Kaggle
@@ -43,6 +45,9 @@ class CardioDataset(Dataset):
         # Read in the dataset
         df = pd.read_csv(csv_path, sep=",")
         print(df.shape)
+
+        # Subsample the dataset to 10,000 rows
+        df = df.sample(n=10000, random_state=0).reset_index(drop=True)
 
         # Preprocess the dataset
         df = auto_encode_categoricals(df)
@@ -205,4 +210,5 @@ def run_dp_federated_learning(epsilon, clip, num_clients, mechanism, rounds, epo
         global_acc.append(correct / total)
         print(f"Round {rnd+1}: Global Accuracy: {correct / total:.4f}")
 
+    return global_acc, client_acc_history
         # yield global_acc.copy(), [acc.copy() for acc in client_acc_history]
