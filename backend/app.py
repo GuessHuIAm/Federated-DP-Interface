@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dp_fl_simulation import run_dp_federated_learning
 from pydantic import BaseModel
+from joblib import Memory
+
+memory = Memory("cache_results")
+run_dp_federated_learning = memory.cache(run_dp_federated_learning)
 
 app = FastAPI()
 

@@ -1,0 +1,1 @@
+{"duration": 10.758549928665161, "input_args": {"epsilon": "5.0", "clip": "1", "num_clients": "5", "mechanism": "'Gaussian'", "rounds": "5", "epochs_per_client": "5", "delta": "1e-05", "dp_noise": "True"}, "time": 1746571777.2070541}
