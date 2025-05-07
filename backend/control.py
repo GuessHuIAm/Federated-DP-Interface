@@ -8,7 +8,7 @@ if __name__ == "__main__":
     num_clients = int(input("Enter number of clients: "))
     rounds = int(input("Enter number of rounds: "))
 
-    final_global_acc, _ = run_dp_federated_learning(
+    final_global_acc, _, _ = run_dp_federated_learning(
         epsilon=epsilon,
         clip=1.0,
         num_clients=num_clients,
