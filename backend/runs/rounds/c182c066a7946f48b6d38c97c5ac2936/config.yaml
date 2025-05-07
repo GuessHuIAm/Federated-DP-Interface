@@ -1,0 +1,8 @@
+clip: 1
+delta: 1e-5
+dp_noise: 1
+epochs_per_client: 5
+epsilon: 1
+mechanism: Gaussian
+num_clients: 5
+rounds: 100
